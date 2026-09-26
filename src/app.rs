@@ -118,12 +118,9 @@ impl App {
         }
 
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            match key.code {
-                KeyCode::Char('x') => {
-                    self.ctrl_x_wait_flag = true;
-                    self.status_bar_text = "C-x pressed".into();
-                }
-                _ => {}
+            if key.code == KeyCode::Char('x') {
+                self.ctrl_x_wait_flag = true;
+                self.status_bar_text = "C-x pressed".into();
             }
             return;
         }
