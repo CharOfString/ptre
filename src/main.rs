@@ -15,8 +15,8 @@
 mod app;
 mod buffers;
 
-use std::io;
 use app::App;
+use std::io;
 
 // Main app of Pointer.
 fn main() -> io::Result<()> {

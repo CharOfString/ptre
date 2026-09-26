@@ -12,13 +12,13 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
+use crate::app::App;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     style::{Color, Style},
     widgets::{Block, Paragraph},
 };
-use crate::app::App;
 
 impl App {
     pub(crate) fn draw(&self, frame: &mut Frame) {

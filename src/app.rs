@@ -12,10 +12,10 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use std::{io, path::PathBuf};
+use crate::buffers::editor::Buffer;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::DefaultTerminal;
-use crate::buffers::editor::Buffer;
+use std::{io, path::PathBuf};
 
 // The state struct of editor
 #[derive(Default)]
