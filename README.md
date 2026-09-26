@@ -18,7 +18,7 @@ Currently, we didn't provide any packaging.
 
 ## Shortcuts
 > **Note**: If we provide shortcuts like `Ctrl + X` `Ctrl + S`, it means that you'll need to press `Ctrl + X` first and 
-> hit `Ctrl + X` immediately after then.
+> hit `Ctrl + S` immediately after then.
 
 * **Save**: `Ctrl + X` `Ctrl + S`.
 * **Quit**: `Ctrl + X` `Ctrl + C`.
