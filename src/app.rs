@@ -14,15 +14,18 @@
 
 use crate::buffers::editor::Buffer;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use ratatui::DefaultTerminal;
+use ratatui::{DefaultTerminal, layout::Rect};
+use ratatui_code_editor::actions::{Delete, InsertText, Redo};
 use std::{io, path::PathBuf};
 
 // The state struct of editor
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
+    pub(crate) editor_area: Rect,
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
+    kill_ring: Option<String>,
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
 }
@@ -117,34 +120,135 @@ impl App {
             }
         }
 
-        if key.modifiers.contains(KeyModifiers::CONTROL) {
-            if key.code == KeyCode::Char('x') {
-                self.ctrl_x_wait_flag = true;
-                self.status_bar_text = "C-x pressed".into();
-            }
+        // Reserve C-x for application commands rather than the editor's cut binding.
+        if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('x') {
+            self.ctrl_x_wait_flag = true;
+            self.status_bar_text = "C-x pressed".into();
             return;
         }
 
-        match key.code {
-            // Directly write normal character into buffer unless you're pressing ALT key.
-            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::ALT) => {
-                self.buffer.text.push(c);
+        // Emacs-style pasteboard shortcuts.
+        match (key.code, key.modifiers) {
+            // M-w => Copy from kill ring.
+            (KeyCode::Char('w'), KeyModifiers::ALT | KeyModifiers::CONTROL) => {
+                if let Some(text) = self.buffer.editor.get_selection_text() {
+                    let _ = self.buffer.editor.set_clipboard(&text);
+                    self.kill_ring = Some(text);
+                    if key.modifiers == KeyModifiers::CONTROL {
+                        self.buffer.editor.apply(Delete);
+                    }
+                }
             }
-            // Pressing ENTER pushes a \n to buffer.
-            KeyCode::Enter => self.buffer.text.push('\n'),
-            // Pressing BACKSPACE results a pop of last char in buffer.
-            KeyCode::Backspace => {
-                self.buffer.text.pop();
+
+            // C-y => "yanking" from kill ring.
+            (KeyCode::Char('y'), KeyModifiers::CONTROL) => {
+                if let Some(text) = &self.kill_ring {
+                    self.buffer.editor.apply(InsertText { text: text.clone() });
+                }
             }
-            // Not handling anything other than those.
-            _ => {}
+            (KeyCode::Char('c' | 'v'), KeyModifiers::CONTROL) => return,
+            (KeyCode::Char('Z' | 'z'), modifiers)
+                if modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
+            {
+                self.buffer.editor.apply(Redo)
+            }
+            // Shouldn't be reached: Unhandled keys
+            _ => {
+                if let Err(err) = self.buffer.editor.input(key, &self.editor_area) {
+                    self.status_bar_text = format!("Editor error: {err}");
+                }
+                return;
+            }
         }
+        self.buffer.editor.focus(&self.editor_area);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn type_text(app: &mut App, text: &str) {
+        app.editor_area = Rect::new(1, 1, 78, 22);
+        for c in text.chars() {
+            let code = if c == '\n' {
+                KeyCode::Enter
+            } else {
+                KeyCode::Char(c)
+            };
+            app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
+        }
+    }
+
+    #[test]
+    fn cursor_editing_and_undo_use_editor_buffer() {
+        let mut app = App::default();
+        type_text(&mut app, "ac");
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        type_text(&mut app, "b");
+        assert_eq!(app.buffer.editor.get_content(), "abc");
+        app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL));
+        assert_eq!(app.buffer.editor.get_content(), "ac");
+    }
+
+    #[test]
+    fn emacs_region_shortcuts_replace_default_clipboard_bindings() {
+        let mut app = App::default();
+        type_text(&mut app, "abc");
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::ALT));
+        assert_eq!(app.kill_ring.as_deref(), Some("bc"));
+        assert_eq!(app.buffer.editor.get_content(), "abc");
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL));
+        assert_eq!(app.buffer.editor.get_content(), "abc");
+
+        app.buffer.editor.clear_selection();
+        app.buffer.editor.set_cursor(3);
+        app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+        assert_eq!(app.buffer.editor.get_content(), "abcbc");
+
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::SHIFT));
+        app.handle_key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL));
+        assert_eq!(app.buffer.editor.get_content(), "abc");
+        app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::CONTROL));
+        assert_eq!(app.buffer.editor.get_content(), "abcbc");
+    }
+
+    #[test]
+    fn save_prompt_does_not_edit_content() {
+        let mut app = App::default();
+        type_text(&mut app, "hello");
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+        type_text(&mut app, "cancelled.rs");
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(app.save_path_input.is_none());
+        assert_eq!(app.buffer.editor.get_content(), "hello");
+    }
+
+    #[test]
+    fn renders_editor_and_updated_shortcuts() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        type_text(&mut app, "fn main() {}");
+        let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        assert_eq!(app.editor_area, Rect::new(1, 1, 98, 21));
+        let screen = terminal.backend().buffer();
+        let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
+        assert!(status.contains("C-x C-c: quit"));
+        assert!(
+            app.buffer
+                .editor
+                .get_visible_cursor(&app.editor_area)
+                .is_some()
+        );
+    }
 
     #[test]
     fn exit_requires_ctrl_x_then_ctrl_c() {
@@ -165,7 +269,7 @@ mod tests {
     #[test]
     fn unnamed_buffer_prompts_then_remembers_path() {
         let mut app = App::default();
-        app.buffer.text = "hello\n".into();
+        type_text(&mut app, "hello\n");
         app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
         app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
         assert!(app.save_path_input.is_some());
@@ -177,7 +281,7 @@ mod tests {
         assert_eq!(app.buffer.path.as_ref(), Some(&path));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello\n");
 
-        app.buffer.text.push_str("world");
+        type_text(&mut app, "world");
         app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
         app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
         assert!(app.save_path_input.is_none());

@@ -21,15 +21,21 @@ use ratatui::{
 };
 
 impl App {
-    pub(crate) fn draw(&self, frame: &mut Frame) {
+    pub(crate) fn draw(&mut self, frame: &mut Frame) {
         // We have buffer on top + status_bar_text bar.
         let [editor_area, status_bar_text_area] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
 
         // Editor buffer.
-        let editor =
-            Paragraph::new(self.buffer.text.as_str()).block(Block::bordered().title(" Pointer "));
-        frame.render_widget(editor, editor_area);
+        let border = Block::bordered().title(" PTRE UNSTABLE ");
+        self.editor_area = border.inner(editor_area);
+        frame.render_widget(border, editor_area);
+        frame.render_widget(&self.buffer.editor, self.editor_area);
+        if self.save_path_input.is_none()
+            && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
+        {
+            frame.set_cursor_position((x, y));
+        }
 
         // status_bar_text bar.
         let status_bar_text_text = if let Some(path_input) = &self.save_path_input {
@@ -44,8 +50,8 @@ impl App {
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
             format!(
-                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | {}",
-                self.buffer.text.chars().count(),
+                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | C-w: cut | M-w: copy | C-y: paste | {}",
+                self.buffer.editor.code_ref().len_chars(),
                 self.status_bar_text
             )
         };
