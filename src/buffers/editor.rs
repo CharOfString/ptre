@@ -34,6 +34,13 @@ impl Default for Buffer {
 
 // Implementation of the editor buffer.
 impl Buffer {
+    pub(crate) fn open(&mut self, path: PathBuf) -> io::Result<()> {
+        let content = fs::read_to_string(&path)?;
+        self.editor.set_content(&content);
+        self.path = Some(path);
+        Ok(())
+    }
+
     pub(crate) fn save(&self) -> io::Result<()> {
         let path = self.path.as_ref().ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "Buffer has no 'file path'.")
