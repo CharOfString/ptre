@@ -27,7 +27,17 @@ impl App {
             Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
 
         // Editor buffer.
-        let border = Block::bordered().title(" PTRE UNSTABLE ");
+        let mut title = String::from(" PTRE UNSTABLE");
+
+        // Buffer indicators.
+        if self.buffer.is_dirty() {
+            title.push_str(" · DIRTY BUFFER");
+        }
+        if self.buffer.obsolete {
+            title.push_str(" · OBSOLETE FILE");
+        }
+        title.push(' ');
+        let border = Block::bordered().title(title);
         self.editor_area = border.inner(editor_area);
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);

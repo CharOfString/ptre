@@ -16,7 +16,11 @@ use crate::buffers::editor::Buffer;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{DefaultTerminal, layout::Rect};
 use ratatui_code_editor::actions::{Delete, InsertText, Redo};
-use std::{io, path::PathBuf};
+use std::{
+    io,
+    path::PathBuf,
+    time::{Duration, Instant},
+};
 
 // The state struct of editor
 #[derive(Default)]
@@ -33,13 +37,24 @@ pub(crate) struct App {
 // Implementation of the app struct
 impl App {
     pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        // Watch the file each 500ms.
+        let interval = Duration::from_millis(500);
+        let mut last_disk_check = Instant::now() - interval;
+
         // The main loop: While the exit flag is false, keep ratatui running
         while !self.exit_flag {
+            // Timer for check file state.
+            if last_disk_check.elapsed() >= interval {
+                self.buffer.check_disk();
+                last_disk_check = Instant::now();
+            }
+
             // New frame
             terminal.draw(|frame| self.draw(frame))?;
 
             // Wait for event; ignore key release to avoid handling a keystroke twice.
-            if let Event::Key(key) = event::read()?
+            if event::poll(interval.saturating_sub(last_disk_check.elapsed()))?
+                && let Event::Key(key) = event::read()?
                 && key.kind != KeyEventKind::Release
             {
                 // Update status_bar_text
@@ -236,10 +251,14 @@ mod tests {
         use ratatui::{Terminal, backend::TestBackend};
         let mut app = App::default();
         type_text(&mut app, "fn main() {}");
+        app.buffer.obsolete = true;
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
         terminal.draw(|frame| app.draw(frame)).unwrap();
         assert_eq!(app.editor_area, Rect::new(1, 1, 98, 21));
         let screen = terminal.backend().buffer();
+        let title: String = (0..100).map(|x| screen[(x, 0)].symbol()).collect();
+        assert!(title.contains("·DIRTY BUFFER"));
+        assert!(title.contains("·OBSOLETE FILE"));
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
         assert!(status.contains("C-x C-c: quit"));
         assert!(
