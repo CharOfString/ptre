@@ -44,13 +44,13 @@ impl App {
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
             format!(
-                " {name} | {} chars | C-x C-s: save | C-q: quit | {}",
+                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | {}",
                 self.buffer.text.chars().count(),
                 self.status_bar_text
             )
         };
-        let status_bar_text =
-            Paragraph::new(status_bar_text_text).style(Style::default().fg(Color::Black).bg(Color::Cyan));
+        let status_bar_text = Paragraph::new(status_bar_text_text)
+            .style(Style::default().fg(Color::Black).bg(Color::Cyan));
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
     }
