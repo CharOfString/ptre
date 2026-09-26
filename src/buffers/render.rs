@@ -22,8 +22,8 @@ use ratatui::{
 
 impl App {
     pub(crate) fn draw(&self, frame: &mut Frame) {
-        // We have buffer on top + status bar.
-        let [editor_area, status_area] =
+        // We have buffer on top + status_bar_text bar.
+        let [editor_area, status_bar_text_area] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
 
         // Editor buffer.
@@ -31,11 +31,11 @@ impl App {
             Paragraph::new(self.buffer.text.as_str()).block(Block::bordered().title(" Pointer "));
         frame.render_widget(editor, editor_area);
 
-        // Status bar.
-        let status_text = if let Some(path_input) = &self.save_path_input {
+        // status_bar_text bar.
+        let status_bar_text_text = if let Some(path_input) = &self.save_path_input {
             format!(
                 " Save as: {path_input}█  |  Enter: save  Esc: cancel  |  {}",
-                self.status
+                self.status_bar_text
             )
         } else {
             let name = self
@@ -44,14 +44,14 @@ impl App {
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
             format!(
-                " {name} | {} chars | C-x C-s: save | C-q: quit | {}",
+                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | {}",
                 self.buffer.text.chars().count(),
-                self.status
+                self.status_bar_text
             )
         };
-        let status =
-            Paragraph::new(status_text).style(Style::default().fg(Color::Black).bg(Color::Cyan));
+        let status_bar_text = Paragraph::new(status_bar_text_text)
+            .style(Style::default().fg(Color::Black).bg(Color::Cyan));
         // Init render
-        frame.render_widget(status, status_area);
+        frame.render_widget(status_bar_text, status_bar_text_area);
     }
 }

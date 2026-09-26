@@ -21,17 +21,17 @@ use std::{io, path::PathBuf};
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
-    should_quit: bool,
-    waiting_for_save: bool,
+    exit_flag: bool,
+    ctrl_x_wait_flag: bool,
     pub(crate) save_path_input: Option<String>,
-    pub(crate) status: String,
+    pub(crate) status_bar_text: String,
 }
 
 // Implementation of the app struct
 impl App {
     pub(crate) fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
         // The main loop: While the exit flag is false, keep ratatui running
-        while !self.should_quit {
+        while !self.exit_flag {
             // New frame
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -39,7 +39,7 @@ impl App {
             if let Event::Key(key) = event::read()?
                 && key.kind != KeyEventKind::Release
             {
-                // Update status
+                // Update status_bar_text
                 self.handle_key(key);
             }
         }
@@ -53,11 +53,11 @@ impl App {
             match key.code {
                 KeyCode::Esc => {
                     self.save_path_input = None;
-                    self.status = "Save cancelled".into();
+                    self.status_bar_text = "Save cancelled".into();
                 }
                 KeyCode::Enter => {
                     if input.trim().is_empty() {
-                        self.status = "Enter a file path".into();
+                        self.status_bar_text = "Enter a file path".into();
                         return;
                     }
 
@@ -65,9 +65,9 @@ impl App {
                     match self.buffer.save_as(path) {
                         Ok(()) => {
                             self.save_path_input = None;
-                            self.status = "Saved".into();
+                            self.status_bar_text = "Saved".into();
                         }
-                        Err(err) => self.status = format!("Save failed: {err}"),
+                        Err(err) => self.status_bar_text = format!("Save failed: {err}"),
                     }
                 }
                 KeyCode::Backspace => {
@@ -85,32 +85,42 @@ impl App {
             return;
         }
 
-        // C-x C-s is a sequence: Ctrl+X, then Ctrl+S.
-        if self.waiting_for_save {
-            self.waiting_for_save = false;
-            if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                if self.buffer.path.is_some() {
-                    match self.buffer.save() {
-                        Ok(()) => self.status = "Saved".into(),
-                        Err(err) => self.status = format!("Save failed: {err}"),
+        // C-x is responsible for C-x C-c (exit) and C-x C-s (save)
+        if self.ctrl_x_wait_flag {
+            self.ctrl_x_wait_flag = false;
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                match key.code {
+                    // Hit "save"
+                    KeyCode::Char('s') => {
+                        // If we've got file path the write the file.
+                        if self.buffer.path.is_some() {
+                            match self.buffer.save() {
+                                Ok(()) => self.status_bar_text = "Saved".into(),
+                                Err(err) => self.status_bar_text = format!("Save failed: {err}"),
+                            }
+                        } else {
+                            // Else, manually ask for user input.
+                            self.save_path_input = Some(String::new());
+                            self.status_bar_text =
+                                "Enter a file path => Enter to save, Esc to cancel".into();
+                        }
+                        return;
                     }
-                } else {
-                    self.save_path_input = Some(String::new());
-                    self.status = "Enter a file path => Enter to save, Esc to cancel".into();
+
+                    // Hit "exit"
+                    KeyCode::Char('c') => {
+                        self.exit_flag = true;
+                        return;
+                    }
+                    _ => {}
                 }
-                return;
             }
         }
 
         if key.modifiers.contains(KeyModifiers::CONTROL) {
-            match key.code {
-                KeyCode::Char('x') => {
-                    self.waiting_for_save = true;
-                    self.status = "C-x pressed".into();
-                }
-                // Shortcut: exit key
-                KeyCode::Char('q') => self.should_quit = true,
-                _ => {}
+            if key.code == KeyCode::Char('x') {
+                self.ctrl_x_wait_flag = true;
+                self.status_bar_text = "C-x pressed".into();
             }
             return;
         }
@@ -135,6 +145,22 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exit_requires_ctrl_x_then_ctrl_c() {
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert!(!app.exit_flag);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
+        assert!(!app.exit_flag);
+
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert!(app.exit_flag);
+    }
 
     #[test]
     fn unnamed_buffer_prompts_then_remembers_path() {
