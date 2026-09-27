@@ -28,7 +28,7 @@ pub(crate) struct Buffer {
 impl Default for Buffer {
     fn default() -> Self {
         Self {
-            editor: Editor::new("rust", "", vesper())
+            editor: Editor::new("text", "", vesper())
                 .expect("built-in editor configuration must be valid"),
             path: None,
             saved_content: String::new(),
@@ -42,7 +42,10 @@ impl Default for Buffer {
 impl Buffer {
     pub(crate) fn open(&mut self, path: PathBuf) -> io::Result<()> {
         let content = fs::read_to_string(&path)?;
-        self.editor.set_content(&content);
+        let language = super::file_type::detect(&path, &content);
+        let editor = Editor::new(language, &content, vesper())
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        self.editor = editor;
         self.path = Some(path);
         self.saved_content = self.editor.get_content();
         self.disk_content = content.into_bytes();
@@ -102,6 +105,33 @@ mod tests {
     impl Drop for TestFile {
         fn drop(&mut self) {
             let _ = fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn opening_files_switches_highlighting_and_failed_open_preserves_buffer() {
+        let mut buffer = Buffer::default();
+        assert!(!buffer.editor.code_ref().is_highlight());
+        for (extension, content, language) in [
+            ("rs", "fn main() {}", "rust"),
+            ("py", "print(1)", "python"),
+            ("txt", "plain text", "text"),
+            ("", "#!/bin/bash\necho hello", "shell"),
+        ] {
+            let mut file = TestFile::new();
+            let path = file.0.with_extension(extension);
+            fs::rename(&file.0, &path).unwrap();
+            file.0 = path;
+            fs::write(&file.0, content).unwrap();
+            buffer.open(file.0.clone()).unwrap();
+            assert_eq!(buffer.editor.code_ref().lang(), language);
+            assert_eq!(buffer.editor.code_ref().is_highlight(), language != "text");
+            assert_eq!(buffer.editor.get_content(), content);
+            assert!(!buffer.is_dirty());
+            assert!(buffer.open(file.0.join("missing")).is_err());
+            assert_eq!(buffer.editor.code_ref().lang(), language);
+            assert_eq!(buffer.editor.get_content(), content);
+            assert_eq!(buffer.path.as_ref(), Some(&file.0));
         }
     }
 

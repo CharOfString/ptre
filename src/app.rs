@@ -15,7 +15,7 @@
 use crate::buffers::editor::Buffer;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{DefaultTerminal, layout::Rect};
-use ratatui_code_editor::actions::{Delete, InsertText, Redo};
+use ratatui_code_editor::actions::{Delete, InsertText, Redo, Undo};
 use std::{
     io,
     path::PathBuf,
@@ -26,6 +26,7 @@ use std::{
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
+    pub(crate) menu: crate::menu::Menu,
     pub(crate) editor_area: Rect,
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
@@ -33,6 +34,7 @@ pub(crate) struct App {
     pub(crate) overwrite_confirm: bool,
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
+    pub(crate) buffer_command: String,
 }
 
 // Implementation of the app struct
@@ -66,7 +68,14 @@ impl App {
         Ok(())
     }
 
-    fn handle_key(&mut self, key: KeyEvent) {
+    pub(crate) fn handle_key(&mut self, key: KeyEvent) {
+        // Print key in buffer command section in bottom tool bar.
+        self.buffer_command = match crate::keys::shortcut_label(key, self.ctrl_x_wait_flag) {
+            Some(chord) if self.ctrl_x_wait_flag => format!("C-x {chord}"),
+            Some(chord) => chord,
+            None => String::new(),
+        };
+
         // Conformation modal "dialog" for overwriting document.
         if self.overwrite_confirm {
             match key.code {
@@ -130,9 +139,21 @@ impl App {
             return;
         }
 
-        // C-x is responsible for C-x C-c (exit) and C-x C-s (save)
+        if self.handle_menu_key(key) {
+            self.ctrl_x_wait_flag = false;
+            return;
+        }
+
+        // C-x is responsible for C-x C-c (exit), C-x C-s (save), and C-x u (undo).
         if self.ctrl_x_wait_flag {
             self.ctrl_x_wait_flag = false;
+            // Hit "undo".
+            if key.code == KeyCode::Char('u') && key.modifiers.is_empty() {
+                self.buffer.editor.apply(Undo);
+                self.buffer.editor.focus(&self.editor_area);
+                return;
+            }
+
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match key.code {
                     // Hit "save"
@@ -174,12 +195,24 @@ impl App {
         // Reserve C-x for application commands rather than the editor's cut binding.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('x') {
             self.ctrl_x_wait_flag = true;
-            self.status_bar_text = "C-x pressed".into();
+            self.status_bar_text.clear();
             return;
         }
 
         // Emacs-style pasteboard shortcuts.
         match (key.code, key.modifiers) {
+            // C-M-_ => Redo. Shift could also be regarded as _.
+            (KeyCode::Char('_'), modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                self.buffer.editor.apply(Redo)
+            }
+            (KeyCode::Char('-'), modifiers)
+                if modifiers
+                    .contains(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT) =>
+            {
+                self.buffer.editor.apply(Redo)
+            }
             // M-w => Copy from kill ring.
             (KeyCode::Char('w'), KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 if let Some(text) = self.buffer.editor.get_selection_text() {
@@ -265,6 +298,20 @@ mod tests {
         assert_eq!(app.buffer.editor.get_content(), "abc");
         app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL));
         assert_eq!(app.buffer.editor.get_content(), "ac");
+    }
+
+    #[test]
+    fn emacs_undo_and_redo_shortcuts() {
+        let mut app = App::default();
+        type_text(&mut app, "a");
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+        assert_eq!(app.buffer.editor.get_content(), "");
+        app.handle_key(KeyEvent::new(
+            KeyCode::Char('_'),
+            KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(app.buffer.editor.get_content(), "a");
     }
 
     #[test]
@@ -387,19 +434,77 @@ mod tests {
         app.buffer.obsolete = true;
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
         terminal.draw(|frame| app.draw(frame)).unwrap();
-        assert_eq!(app.editor_area, Rect::new(1, 1, 98, 21));
+        assert_eq!(app.editor_area, Rect::new(1, 3, 98, 16));
         let screen = terminal.backend().buffer();
-        let title: String = (0..100).map(|x| screen[(x, 0)].symbol()).collect();
+        let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
+        assert!(title.starts_with("╭─ [No Name] · Text"));
         assert!(title.contains("· DIRTY BUFFER"));
         assert!(title.contains("· OBSOLETE FILE"));
+        assert_eq!(screen[(0, 2)].symbol(), "╭");
+        assert_eq!(screen[(99, 2)].symbol(), "╮");
+        assert_eq!(screen[(0, 21)].symbol(), "╰");
+        assert_eq!(screen[(99, 21)].symbol(), "╯");
+        assert_eq!(screen[(0, 2)].fg, ratatui::style::Color::White);
+        assert_eq!(screen[(0, 10)].fg, ratatui::style::Color::White);
+        assert_eq!(screen[(99, 10)].fg, ratatui::style::Color::White);
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
-        assert!(status.contains("C-x C-c: quit"));
+        assert!(status.contains("F10: menu"));
+        assert!(!status.contains("Buffer command"));
+        for x in 0..100 {
+            assert_eq!(screen[(x, 22)].symbol(), "─");
+            assert_eq!(screen[(x, 21)].fg, ratatui::style::Color::White);
+            assert_eq!(screen[(x, 22)].fg, ratatui::style::Color::Green);
+            assert_eq!(screen[(x, 22)].bg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 23)].bg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 23)].fg, ratatui::style::Color::Green);
+        }
         assert!(
             app.buffer
                 .editor
                 .get_visible_cursor(&app.editor_area)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn echoes_emacs_shortcuts_after_menu_hint() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+        let status = |app: &mut App, terminal: &mut Terminal<TestBackend>| {
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            (0..100)
+                .map(|x| terminal.backend().buffer()[(x, 23)].symbol().to_owned())
+                .collect::<String>()
+        };
+        assert!(status(&mut app, &mut terminal).contains("F10: menu"));
+        assert!(!status(&mut app, &mut terminal).contains("Buffer command:"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        assert!(status(&mut app, &mut terminal).contains("Buffer command: C-x"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+        assert!(status(&mut app, &mut terminal).contains("Buffer command: C-x u"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(!status(&mut app, &mut terminal).contains("Buffer command: C-x"));
+        app.handle_key(KeyEvent::new(
+            KeyCode::Char('_'),
+            KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert!(status(&mut app, &mut terminal).contains("C-M-_"));
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        assert!(status(&mut app, &mut terminal).contains("F10"));
+    }
+
+    #[test]
+    fn editor_title_shows_file_name_and_language() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        app.buffer.open(PathBuf::from("Cargo.toml")).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let screen = terminal.backend().buffer();
+        let title: String = (0..80).map(|x| screen[(x, 2)].symbol()).collect();
+        assert!(title.starts_with("╭─ Cargo.toml · TOML"));
+        assert!(!title.contains("PTRE UNSTABLE"));
     }
 
     #[test]

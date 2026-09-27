@@ -17,17 +17,28 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     style::{Color, Style},
-    widgets::{Block, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 impl App {
     pub(crate) fn draw(&mut self, frame: &mut Frame) {
-        // We have buffer on top + status_bar_text bar.
-        let [editor_area, status_bar_text_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
+        let [menu_area, editor_area, status_bar_text_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(2),
+        ])
+        .areas(frame.area());
+        self.menu.draw_bar(frame, menu_area);
 
         // Editor buffer.
-        let mut title = String::from(" PTRE UNSTABLE");
+        let name = self
+            .buffer
+            .path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy());
+        let language = super::file_type::display_name(self.buffer.editor.code_ref().lang());
+        let mut title = format!("─ {name} · {language}");
 
         // Buffer indicators.
         if self.buffer.is_dirty() {
@@ -37,12 +48,20 @@ impl App {
             title.push_str(" · OBSOLETE FILE");
         }
         title.push(' ');
-        let border = Block::bordered().title(title);
-        self.editor_area = border.inner(editor_area);
+        let border = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::White))
+            .title(title);
+        let [content_area, buffer_status_area] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(2)])
+                .areas(border.inner(editor_area));
+        self.editor_area = content_area;
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
+        super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
         if self.save_path_input.is_none()
             && !self.overwrite_confirm
+            && self.menu.active.is_none()
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
         {
             frame.set_cursor_position((x, y));
@@ -60,16 +79,39 @@ impl App {
                 .path
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
-            format!(
-                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | C-w: cut | M-w: copy | C-y: paste | {}",
-                self.buffer.editor.code_ref().len_chars(),
-                self.status_bar_text
-            )
+
+            if self.status_bar_text.is_empty() {
+                if self.buffer_command.is_empty() {
+                    format!(" {name} ※  F10: menu")
+                } else {
+                    format!(
+                        " {name} ※  F10: menu ※  Buffer command: {}",
+                        self.buffer_command
+                    )
+                }
+            } else {
+                if self.buffer_command.is_empty() {
+                    format!(" {name} ※  F10: menu ※  {}", self.status_bar_text)
+                } else {
+                    format!(
+                        " {name} ※  F10: menu ※  Buffer command: {}  ※ {}",
+                        self.buffer_command, self.status_bar_text
+                    )
+                }
+            }
         };
         let status_bar_text = Paragraph::new(status_bar_text_text)
-            .style(Style::default().fg(Color::Black).bg(Color::Cyan));
+            .style(Style::default().fg(Color::Green))
+            .block(
+                Block::new()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Green)),
+            );
+
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
+
+        self.menu.draw_popup(frame);
 
         if self.overwrite_confirm {
             super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());
