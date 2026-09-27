@@ -42,6 +42,7 @@ impl App {
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
         if self.save_path_input.is_none()
+            && !self.overwrite_confirm
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
         {
             frame.set_cursor_position((x, y));
@@ -69,5 +70,9 @@ impl App {
             .style(Style::default().fg(Color::Black).bg(Color::Cyan));
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
+
+        if self.overwrite_confirm {
+            super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());
+        }
     }
 }

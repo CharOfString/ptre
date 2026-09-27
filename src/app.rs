@@ -30,6 +30,7 @@ pub(crate) struct App {
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
     kill_ring: Option<String>,
+    pub(crate) overwrite_confirm: bool,
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
 }
@@ -66,6 +67,32 @@ impl App {
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
+        // Conformation modal "dialog" for overwriting document.
+        if self.overwrite_confirm {
+            match key.code {
+                // Press Y or ENTER for conforming.
+                KeyCode::Char('y' | 'Y') | KeyCode::Enter
+                    if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+                {
+                    self.overwrite_confirm = false;
+                    match self.buffer.save() {
+                        Ok(()) => self.status_bar_text = "Saved".into(),
+                        Err(err) => self.status_bar_text = format!("Save failed: {err}"),
+                    }
+                }
+                
+                // Press N or ESC to cancel.
+                KeyCode::Char('n' | 'N') | KeyCode::Esc => {
+                    self.overwrite_confirm = false;
+                    self.status_bar_text = "Save cancelled".into();
+                }
+                
+                // Ignoring all other inputs.
+                _ => {}
+            }
+            return;
+        }
+
         // While entering a filename, keystrokes must not change the buffer.
         if let Some(input) = &mut self.save_path_input {
             match key.code {
@@ -112,9 +139,18 @@ impl App {
                     KeyCode::Char('s') => {
                         // If we've got file path the write the file.
                         if self.buffer.path.is_some() {
-                            match self.buffer.save() {
-                                Ok(()) => self.status_bar_text = "Saved".into(),
-                                Err(err) => self.status_bar_text = format!("Save failed: {err}"),
+                            self.buffer.check_disk();
+                            if self.buffer.obsolete {
+                                self.overwrite_confirm = true;
+                                self.status_bar_text =
+                                    "File changed on disk => confirm overwrite".into();
+                            } else {
+                                match self.buffer.save() {
+                                    Ok(()) => self.status_bar_text = "Saved".into(),
+                                    Err(err) => {
+                                        self.status_bar_text = format!("Save failed: {err}")
+                                    }
+                                }
                             }
                         } else {
                             // Else, manually ask for user input.
@@ -182,6 +218,31 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestFile(PathBuf);
+    impl TestFile {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "ptre-confirm-test-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            std::fs::write(&path, "original").unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TestFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn save_keys(app: &mut App) {
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL));
+    }
 
     fn type_text(app: &mut App, text: &str) {
         app.editor_area = Rect::new(1, 1, 78, 22);
@@ -244,6 +305,76 @@ mod tests {
         app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(app.save_path_input.is_none());
         assert_eq!(app.buffer.editor.get_content(), "hello");
+    }
+
+    #[test]
+    fn obsolete_file_requires_confirmation_and_cancel_keeps_disk_intact() {
+        let file = TestFile::new();
+        let mut app = App::default();
+        app.buffer.open(file.0.clone()).unwrap();
+        app.buffer.editor.set_content("my edits");
+        std::fs::write(&file.0, "external edits").unwrap();
+
+        // No timer tick is needed: saving checks the disk immediately.
+        save_keys(&mut app);
+        assert!(app.overwrite_confirm);
+        assert_eq!(std::fs::read_to_string(&file.0).unwrap(), "external edits");
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert_eq!(app.buffer.editor.get_content(), "my edits");
+        assert!(app.overwrite_confirm);
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(!app.overwrite_confirm);
+        assert!(app.buffer.is_dirty());
+        assert!(app.buffer.obsolete);
+        assert_eq!(std::fs::read_to_string(&file.0).unwrap(), "external edits");
+    }
+
+    #[test]
+    fn confirming_overwrites_obsolete_file_and_resets_indicators() {
+        let file = TestFile::new();
+        let mut app = App::default();
+        app.buffer.open(file.0.clone()).unwrap();
+        app.buffer.editor.set_content("my edits");
+        std::fs::write(&file.0, "external edits").unwrap();
+        save_keys(&mut app);
+        assert!(app.overwrite_confirm);
+        app.handle_key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        assert!(!app.overwrite_confirm);
+        assert!(!app.buffer.is_dirty());
+        assert!(!app.buffer.obsolete);
+        assert_eq!(std::fs::read_to_string(&file.0).unwrap(), "my edits");
+    }
+
+    #[test]
+    fn enter_confirms_overwrite() {
+        let file = TestFile::new();
+        let mut app = App::default();
+        app.buffer.open(file.0.clone()).unwrap();
+        app.buffer.editor.set_content("my edits");
+        std::fs::write(&file.0, "external edits").unwrap();
+        save_keys(&mut app);
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert!(!app.overwrite_confirm);
+        assert_eq!(std::fs::read_to_string(&file.0).unwrap(), "my edits");
+    }
+
+    #[test]
+    fn confirmation_dialog_is_rendered_over_editor() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        app.overwrite_confirm = true;
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let screen = terminal.backend().buffer();
+        let text: String = (0..24)
+            .flat_map(|y| (0..80).map(move |x| screen[(x, y)].symbol().to_owned()))
+            .collect();
+        assert!(text.contains("Confirm overwrite"));
+        assert!(text.contains("File changed on disk. Overwrite it?"));
+        assert!(text.contains("Y/ENTER"));
     }
 
     #[test]
