@@ -1,3 +1,11 @@
+ptre (0.1.1-1) unstable; urgency=medium
+
+  * File type indicator.
+  * A bottom toolbar for editor buffer.
+  * Enhanced bottom bar & top bar style.
+
+ -- CharOfString <root@charofstring.cc>  Sun, 27 Sep 2026 01:17:10 -0500
+
 ptre (0.1.0-3) unstable; urgency=medium
 
   * Fixed trixie building issue.
