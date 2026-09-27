@@ -1,0 +1,57 @@
+version: "1.0"
+name: build-deb
+displayName: Build Debian packages
+stages:
+- name: Ubuntu 24.04 amd64
+  displayName: Ubuntu 24.04 amd64
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: execute@docker
+    name: build_deb
+    displayName: Build deb
+    image: ubuntu:24.04
+    command:
+    - set -euo pipefail
+    - export DEBIAN_FRONTEND=noninteractive
+    - test "$(dpkg --print-architecture)" = amd64
+    - ""
+    - apt-get update
+    - apt-get install -y build-essential debhelper dpkg-dev ca-certificates curl
+    - apt-get build-dep -y .
+    - ""
+    - curl --proto '=https' --tlsv1.2 -sSf \
+    - '  https://sh.rustup.rs -o /tmp/rustup-init.sh'
+    - RUSTUP_INIT_SKIP_PATH_CHECK=yes \
+    - '  sh /tmp/rustup-init.sh -y --profile minimal \'
+    - '  --default-toolchain stable'
+    - export PATH="/root/.cargo/bin:$PATH"
+    - ""
+    - dpkg-buildpackage -us -uc -b
+    - ""
+    - mkdir -p dist
+    - for package in ../*.deb; do
+    - '  case "$package" in *-dbgsym_*.deb) continue ;; esac'
+    - '  filename="$(basename "$package" .deb)"'
+    - "  cp \"$package\" \"dist/${filename}_ubuntu-24.04.deb\""
+    - done
+    - test -n "$(find dist -maxdepth 1 -name '*.deb' -print -quit)"
+    artifacts:
+    - name: DEB_PACKAGES
+      path:
+      - dist
+      type: .tar.gz
+  - step: publish@general_artifacts
+    name: publish_deb
+    displayName: Publish packages
+    dependArtifact: DEB_PACKAGES
+    artifactName: debian-packages-ubuntu-24.04-amd64
+triggers:
+  trigger: auto
+  push:
+    tags:
+      prefix:
+      - ""
+      precise: []
+      include: []
+notify: []
