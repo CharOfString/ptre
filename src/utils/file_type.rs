@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-pub(super) fn display_name(language: &str) -> &str {
+pub(crate) fn display_name(language: &str) -> &str {
     match language {
         "text" => "Text",
         "rust" => "Rust",
@@ -38,7 +38,7 @@ pub(super) fn display_name(language: &str) -> &str {
 }
 
 // Detect supported languages
-pub(super) fn detect(path: &Path, content: &str) -> &'static str {
+pub(crate) fn detect(path: &Path, content: &str) -> &'static str {
     let filename = path
         .file_name()
         .and_then(|name| name.to_str())

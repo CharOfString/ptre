@@ -12,7 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use crate::menu::LIGHT_BLUE;
+use crate::buffers::menu::LIGHT_BLUE;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -47,7 +47,7 @@ fn labels(editor: &Editor) -> (String, String) {
         "LF"
     };
 
-    let language = super::file_type::display_name(code.lang());
+    let language = crate::utils::file_type::display_name(code.lang());
     (
         format!(" L{} {position} · {} chars", line + 1, code.len_chars()),
         format!("{ending} · {language} "),

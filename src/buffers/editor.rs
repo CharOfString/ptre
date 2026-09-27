@@ -42,7 +42,7 @@ impl Default for Buffer {
 impl Buffer {
     pub(crate) fn open(&mut self, path: PathBuf) -> io::Result<()> {
         let content = fs::read_to_string(&path)?;
-        let language = super::file_type::detect(&path, &content);
+        let language = crate::utils::file_type::detect(&path, &content);
         let editor = Editor::new(language, &content, vesper())
             .map_err(|error| io::Error::other(error.to_string()))?;
         self.editor = editor;

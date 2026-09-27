@@ -12,8 +12,5 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-mod dialog;
-pub(crate) mod editor;
-mod editor_status;
-pub(crate) mod menu;
-mod render;
+pub(crate) mod file_type;
+pub(crate) mod keys;

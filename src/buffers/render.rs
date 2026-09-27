@@ -37,7 +37,7 @@ impl App {
             .as_ref()
             .and_then(|path| path.file_name())
             .map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy());
-        let language = super::file_type::display_name(self.buffer.editor.code_ref().lang());
+        let language = crate::utils::file_type::display_name(self.buffer.editor.code_ref().lang());
         let mut title = format!("─ {name} · {language}");
 
         // Buffer indicators.

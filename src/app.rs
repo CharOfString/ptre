@@ -26,7 +26,7 @@ use std::{
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
-    pub(crate) menu: crate::menu::Menu,
+    pub(crate) menu: crate::buffers::menu::Menu,
     pub(crate) editor_area: Rect,
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
@@ -70,7 +70,7 @@ impl App {
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) {
         // Print key in buffer command section in bottom tool bar.
-        self.buffer_command = match crate::keys::shortcut_label(key, self.ctrl_x_wait_flag) {
+        self.buffer_command = match crate::utils::keys::shortcut_label(key, self.ctrl_x_wait_flag) {
             Some(chord) if self.ctrl_x_wait_flag => format!("C-x {chord}"),
             Some(chord) => chord,
             None => String::new(),

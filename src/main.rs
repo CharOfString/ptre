@@ -14,8 +14,7 @@
 
 mod app;
 mod buffers;
-mod keys;
-mod menu;
+mod utils;
 
 use app::App;
 use std::{ffi::OsString, io, path::PathBuf};
