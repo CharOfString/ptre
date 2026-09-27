@@ -14,4 +14,5 @@
 
 mod dialog;
 pub(crate) mod editor;
+mod file_type;
 mod render;
