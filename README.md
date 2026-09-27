@@ -20,7 +20,28 @@ $ cargo run -- README.md
 ```
 Directories and multiple arguments are rejected.
 
-Currently, we didn't provide any packaging.
+## Packaging
+### Debian
+> **NOTE**: Network connection WILL BE REQUIRED!!
+
+To build a Debian binary package, simply run:
+
+```bash
+$ ./build-deb -d
+```
+
+Dependencies will automatically being installed to your computer.
+
+Next time you may run:
+
+```bash
+$ ./build-deb
+```
+
+To do a cleanup, run:
+```bash
+$ ./build-deb -c
+```
 
 ## Shortcuts
 > **Note**: If we provide shortcuts like `Ctrl + X` `Ctrl + S`, it means that you'll need to press `Ctrl + X` first and 

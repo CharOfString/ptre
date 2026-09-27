@@ -1,0 +1,15 @@
+#!/usr/bin/make -f
+
+export CARGO_TARGET_DIR := $(CURDIR)/target
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --locked
+
+override_dh_auto_test:
+	cargo test --release --locked
+
+override_dh_auto_install:
+	install -D -m 0755 target/release/ptre debian/ptre/usr/bin/ptre

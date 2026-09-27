@@ -1,0 +1,13 @@
+Source: ptre
+Section: editors
+Priority: optional
+Maintainer: CharOfString <root@charofstring.cc>
+Build-Depends: debhelper-compat (= 13), cargo, rustc
+Standards-Version: 4.7.2
+Homepage: https://github.com/CharOfString/ptre
+Rules-Requires-Root: no
+
+Package: ptre
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Lightweight text editor
