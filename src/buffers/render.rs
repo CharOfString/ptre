@@ -22,9 +22,13 @@ use ratatui::{
 
 impl App {
     pub(crate) fn draw(&mut self, frame: &mut Frame) {
-        // We have buffer on top + status_bar_text bar.
-        let [editor_area, status_bar_text_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(frame.area());
+        let [menu_area, editor_area, status_bar_text_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .areas(frame.area());
+        self.menu.draw_bar(frame, menu_area);
 
         // Editor buffer.
         let mut title = String::from(" PTRE UNSTABLE");
@@ -43,6 +47,7 @@ impl App {
         frame.render_widget(&self.buffer.editor, self.editor_area);
         if self.save_path_input.is_none()
             && !self.overwrite_confirm
+            && self.menu.active.is_none()
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
         {
             frame.set_cursor_position((x, y));
@@ -61,7 +66,7 @@ impl App {
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
             format!(
-                " {name} | {} chars | C-x C-s: save | C-x C-c: quit | C-w: cut | M-w: copy | C-y: paste | {}",
+                " {name} | {} chars | F10: menu | {}",
                 self.buffer.editor.code_ref().len_chars(),
                 self.status_bar_text
             )
@@ -70,6 +75,8 @@ impl App {
             .style(Style::default().fg(Color::Black).bg(Color::Cyan));
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
+
+        self.menu.draw_popup(frame);
 
         if self.overwrite_confirm {
             super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());

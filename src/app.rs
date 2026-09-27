@@ -15,7 +15,7 @@
 use crate::buffers::editor::Buffer;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{DefaultTerminal, layout::Rect};
-use ratatui_code_editor::actions::{Delete, InsertText, Redo};
+use ratatui_code_editor::actions::{Delete, InsertText, Redo, Undo};
 use std::{
     io,
     path::PathBuf,
@@ -26,6 +26,7 @@ use std::{
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
+    pub(crate) menu: crate::menu::Menu,
     pub(crate) editor_area: Rect,
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
@@ -66,7 +67,7 @@ impl App {
         Ok(())
     }
 
-    fn handle_key(&mut self, key: KeyEvent) {
+    pub(crate) fn handle_key(&mut self, key: KeyEvent) {
         // Conformation modal "dialog" for overwriting document.
         if self.overwrite_confirm {
             match key.code {
@@ -130,9 +131,21 @@ impl App {
             return;
         }
 
-        // C-x is responsible for C-x C-c (exit) and C-x C-s (save)
+        if self.handle_menu_key(key) {
+            self.ctrl_x_wait_flag = false;
+            return;
+        }
+
+        // C-x is responsible for C-x C-c (exit), C-x C-s (save), and C-x u (undo).
         if self.ctrl_x_wait_flag {
             self.ctrl_x_wait_flag = false;
+            // Hit "undo".
+            if key.code == KeyCode::Char('u') && key.modifiers.is_empty() {
+                self.buffer.editor.apply(Undo);
+                self.buffer.editor.focus(&self.editor_area);
+                return;
+            }
+
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 match key.code {
                     // Hit "save"
@@ -180,6 +193,18 @@ impl App {
 
         // Emacs-style pasteboard shortcuts.
         match (key.code, key.modifiers) {
+            // C-M-_ => Redo. Shift could also be regarded as _.
+            (KeyCode::Char('_'), modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                self.buffer.editor.apply(Redo)
+            }
+            (KeyCode::Char('-'), modifiers)
+                if modifiers
+                    .contains(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT) =>
+            {
+                self.buffer.editor.apply(Redo)
+            }
             // M-w => Copy from kill ring.
             (KeyCode::Char('w'), KeyModifiers::ALT | KeyModifiers::CONTROL) => {
                 if let Some(text) = self.buffer.editor.get_selection_text() {
@@ -265,6 +290,20 @@ mod tests {
         assert_eq!(app.buffer.editor.get_content(), "abc");
         app.handle_key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::CONTROL));
         assert_eq!(app.buffer.editor.get_content(), "ac");
+    }
+
+    #[test]
+    fn emacs_undo_and_redo_shortcuts() {
+        let mut app = App::default();
+        type_text(&mut app, "a");
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+        assert_eq!(app.buffer.editor.get_content(), "");
+        app.handle_key(KeyEvent::new(
+            KeyCode::Char('_'),
+            KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert_eq!(app.buffer.editor.get_content(), "a");
     }
 
     #[test]
@@ -387,9 +426,9 @@ mod tests {
         app.buffer.obsolete = true;
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
         terminal.draw(|frame| app.draw(frame)).unwrap();
-        assert_eq!(app.editor_area, Rect::new(1, 1, 98, 21));
+        assert_eq!(app.editor_area, Rect::new(1, 3, 98, 19));
         let screen = terminal.backend().buffer();
-        let title: String = (0..100).map(|x| screen[(x, 0)].symbol()).collect();
+        let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
         assert!(title.contains("· DIRTY BUFFER"));
         assert!(title.contains("· OBSOLETE FILE"));
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
