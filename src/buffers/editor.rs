@@ -19,6 +19,9 @@ use std::{fs, io, path::PathBuf};
 pub(crate) struct Buffer {
     pub(crate) editor: Editor,
     pub(crate) path: Option<PathBuf>,
+    saved_content: String,
+    disk_content: Vec<u8>,
+    pub(crate) obsolete: bool,
 }
 
 // Default editor configuration
@@ -28,23 +31,133 @@ impl Default for Buffer {
             editor: Editor::new("rust", "", vesper())
                 .expect("built-in editor configuration must be valid"),
             path: None,
+            saved_content: String::new(),
+            disk_content: Vec::new(),
+            obsolete: false,
         }
     }
 }
 
 // Implementation of the editor buffer.
 impl Buffer {
-    pub(crate) fn save(&self) -> io::Result<()> {
-        let path = self.path.as_ref().ok_or_else(|| {
+    pub(crate) fn open(&mut self, path: PathBuf) -> io::Result<()> {
+        let content = fs::read_to_string(&path)?;
+        self.editor.set_content(&content);
+        self.path = Some(path);
+        self.saved_content = self.editor.get_content();
+        self.disk_content = content.into_bytes();
+        self.obsolete = false;
+        Ok(())
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.editor.get_content() != self.saved_content
+    }
+
+    // Compare bytes for dirty buffer checks.
+    pub(crate) fn check_disk(&mut self) {
+        self.obsolete = self.path.as_ref().is_some_and(|path| {
+            fs::read(path).map_or(true, |content| content != self.disk_content)
+        });
+    }
+
+    pub(crate) fn save(&mut self) -> io::Result<()> {
+        let path = self.path.clone().ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "Buffer has no 'file path'.")
         })?;
-        fs::write(path, self.editor.get_content())
+        self.save_as(path)
     }
 
     pub(crate) fn save_as(&mut self, path: PathBuf) -> io::Result<()> {
-        // Only update buffer path while write succeed
-        fs::write(&path, self.editor.get_content())?;
+        let content = self.editor.get_content();
+
+        // Only update the path and snapshots after a successful write.
+        fs::write(&path, &content)?;
         self.path = Some(path);
+        self.disk_content = content.as_bytes().to_vec();
+        self.saved_content = content;
+        self.obsolete = false;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestFile(PathBuf);
+    impl TestFile {
+        fn new() -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "ptre-watch-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::write(&path, "original").unwrap();
+            Self(path)
+        }
+    }
+    impl Drop for TestFile {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.0);
+        }
+    }
+
+    #[test]
+    fn edits_and_disk_changes_are_independent_and_save_resets_both() {
+        let file = TestFile::new();
+        let mut buffer = Buffer::default();
+        buffer.open(file.0.clone()).unwrap();
+        buffer.check_disk();
+        assert!(!buffer.is_dirty());
+        assert!(!buffer.obsolete);
+        buffer.editor.set_content("edited");
+        assert!(buffer.is_dirty());
+        buffer.check_disk();
+        assert!(!buffer.obsolete);
+        fs::write(&file.0, "external").unwrap();
+        buffer.check_disk();
+        assert!(buffer.obsolete);
+        assert_eq!(buffer.editor.get_content(), "edited");
+        buffer.save().unwrap();
+        buffer.check_disk();
+        assert!(!buffer.is_dirty());
+        assert!(!buffer.obsolete);
+        assert_eq!(fs::read_to_string(&file.0).unwrap(), "edited");
+    }
+
+    #[test]
+    fn disk_changes_deletion_and_replacement_do_not_modify_buffer() {
+        let file = TestFile::new();
+        let mut buffer = Buffer::default();
+        buffer.open(file.0.clone()).unwrap();
+        fs::write(&file.0, "external").unwrap(); // Same length as original.
+        buffer.check_disk();
+        assert!(buffer.obsolete);
+        assert!(!buffer.is_dirty());
+        fs::remove_file(&file.0).unwrap();
+        buffer.check_disk();
+        assert!(buffer.obsolete);
+        let replacement = TestFile::new();
+        fs::rename(&replacement.0, &file.0).unwrap();
+        buffer.check_disk();
+        assert!(!buffer.obsolete); // Original bytes restored.
+        assert_eq!(buffer.editor.get_content(), "original");
+    }
+
+    #[test]
+    fn reverting_edits_and_failed_save_preserve_snapshots() {
+        let file = TestFile::new();
+        let mut buffer = Buffer::default();
+        buffer.open(file.0.clone()).unwrap();
+        buffer.editor.set_content("edited");
+        assert!(buffer.is_dirty());
+        assert!(buffer.save_as(file.0.join("invalid")).is_err());
+        assert_eq!(buffer.path.as_ref(), Some(&file.0));
+        assert!(buffer.is_dirty());
+        buffer.editor.set_content("original");
+        assert!(!buffer.is_dirty());
     }
 }

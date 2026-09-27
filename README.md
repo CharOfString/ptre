@@ -14,6 +14,12 @@ To run the code directly:
 $ cargo run
 ```
 
+To open an existing file in the editor buffer, pass its relative or absolute path:
+```bash
+$ cargo run -- README.md
+```
+Directories and multiple arguments are rejected.
+
 Currently, we didn't provide any packaging.
 
 ## Shortcuts
