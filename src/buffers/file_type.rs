@@ -14,6 +14,29 @@
 
 use std::path::Path;
 
+pub(super) fn display_name(language: &str) -> &str {
+    match language {
+        "text" => "Text",
+        "rust" => "Rust",
+        "javascript" => "JavaScript",
+        "typescript" => "TypeScript",
+        "python" => "Python",
+        "go" => "Go",
+        "java" => "Java",
+        "c_sharp" => "C#",
+        "c" => "C",
+        "cpp" => "C++",
+        "html" => "HTML",
+        "css" => "CSS",
+        "yaml" => "YAML",
+        "json" => "JSON",
+        "toml" => "TOML",
+        "shell" => "Shell",
+        "markdown" => "Markdown",
+        _ => language,
+    }
+}
+
 // Detect supported languages
 pub(super) fn detect(path: &Path, content: &str) -> &'static str {
     let filename = path

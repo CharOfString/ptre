@@ -17,7 +17,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     style::{Color, Style},
-    widgets::{Block, Paragraph},
+    widgets::{Block, BorderType, Paragraph},
 };
 
 impl App {
@@ -31,7 +31,14 @@ impl App {
         self.menu.draw_bar(frame, menu_area);
 
         // Editor buffer.
-        let mut title = String::from(" PTRE UNSTABLE");
+        let name = self
+            .buffer
+            .path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy());
+        let language = super::file_type::display_name(self.buffer.editor.code_ref().lang());
+        let mut title = format!("─ {name} · {language}");
 
         // Buffer indicators.
         if self.buffer.is_dirty() {
@@ -41,7 +48,9 @@ impl App {
             title.push_str(" · OBSOLETE FILE");
         }
         title.push(' ');
-        let border = Block::bordered().title(title);
+        let border = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title(title);
         self.editor_area = border.inner(editor_area);
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
@@ -73,6 +82,7 @@ impl App {
         };
         let status_bar_text = Paragraph::new(status_bar_text_text)
             .style(Style::default().fg(Color::Black).bg(Color::Cyan));
+
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
 

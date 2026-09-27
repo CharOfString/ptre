@@ -429,16 +429,34 @@ mod tests {
         assert_eq!(app.editor_area, Rect::new(1, 3, 98, 19));
         let screen = terminal.backend().buffer();
         let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
+        assert!(title.starts_with("╭─ [No Name] · Text"));
         assert!(title.contains("· DIRTY BUFFER"));
         assert!(title.contains("· OBSOLETE FILE"));
+        assert_eq!(screen[(0, 2)].symbol(), "╭");
+        assert_eq!(screen[(99, 2)].symbol(), "╮");
+        assert_eq!(screen[(0, 22)].symbol(), "╰");
+        assert_eq!(screen[(99, 22)].symbol(), "╯");
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
-        assert!(status.contains("C-x C-c: quit"));
+        assert!(status.contains("F10: menu"));
         assert!(
             app.buffer
                 .editor
                 .get_visible_cursor(&app.editor_area)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn editor_title_shows_file_name_and_language() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        app.buffer.open(PathBuf::from("Cargo.toml")).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let screen = terminal.backend().buffer();
+        let title: String = (0..80).map(|x| screen[(x, 2)].symbol()).collect();
+        assert!(title.starts_with("╭─ Cargo.toml · TOML"));
+        assert!(!title.contains("PTRE UNSTABLE"));
     }
 
     #[test]
