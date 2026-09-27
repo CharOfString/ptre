@@ -1,65 +1,65 @@
-version: '1.0'
+version: "1.0"
 name: pr-checks
 displayName: PR checks
-
-# Match every PR branch; ordinary pushes and tags do not trigger checks.
+stages:
+- name: PR checks
+  displayName: PR checks
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@gcc
+    name: check
+    displayName: "Lint, format, license and compilation"
+    gccVersion: "9.4"
+    commands:
+    - bash <<'CHECKS'
+    - set -euo pipefail
+    - ""
+    - echo 'Install Rust tooling'
+    - wget -q https://sh.rustup.rs -O /tmp/ptre-rustup.sh
+    - sh /tmp/ptre-rustup.sh -y --profile minimal --default-toolchain stable
+    - export PATH="$HOME/.cargo/bin:$PATH"
+    - rustup update stable
+    - rustup default stable
+    - rustup component add clippy rustfmt
+    - ""
+    - echo 'Check linting'
+    - cargo clippy --all-targets --all-features --locked -- -D warnings
+    - ""
+    - echo 'Check code style'
+    - ./format-code --check
+    - ""
+    - "# Resolve the latest Go 1.26 patch, matching actions/setup-go."
+    - echo 'Set up Go 1.26'
+    - wget -q 'https://go.dev/dl/?mode=json&include=all' -O /tmp/ptre-go-releases.json
+    - "go_archive=\"$(jq -er '[.[] | select(.stable and (.version | startswith(\"\
+      go1.26.\")))][0].files[] | select(.os == \"linux\" and .arch == \"amd64\" and\
+      \ .kind == \"archive\") | .filename' /tmp/ptre-go-releases.json)\""
+    - "go_sha256=\"$(jq -er --arg file \"$go_archive\" '.[] .files[] | select(.filename\
+      \ == $file) | .sha256' /tmp/ptre-go-releases.json)\""
+    - tool_dir="$(mktemp -d)"
+    - wget -q "https://go.dev/dl/$go_archive" -O "$tool_dir/go.tar.gz"
+    - echo "$go_sha256  $tool_dir/go.tar.gz" | sha256sum --check
+    - tar -xzf "$tool_dir/go.tar.gz" -C "$tool_dir"
+    - export GOROOT="$tool_dir/go"
+    - export PATH="$GOROOT/bin:$PATH"
+    - ""
+    - echo 'Install addlicense'
+    - go install github.com/google/addlicense@latest
+    - export PATH="$(go env GOPATH)/bin:$PATH"
+    - ""
+    - echo 'Check license headers'
+    - COPYRIGHT_EMAIL=root@charofstring.cc ./update-license --check
+    - ""
+    - echo 'Check compilation'
+    - cargo check --all-targets --all-features --locked
+    - CHECKS
 triggers:
   trigger: auto
   pr:
     branches:
+      prefix: []
+      precise: []
       include:
-        - '.*'
-
-stages:
-  - name: check
-    displayName: PR checks
-    trigger: auto
-    strategy: naturally
-    steps:
-      # The GCC build image supplies Ubuntu and a native linker. Gitee Go
-      # checks out the PR's pre-merged source before running build commands.
-      - step: build@gcc
-        name: check
-        displayName: Lint, format, license and compilation
-        gccVersion: '9.4'
-        commands:
-          - |
-            bash <<'CHECKS'
-            set -euo pipefail
-
-            echo 'Install Rust tooling'
-            wget -q https://sh.rustup.rs -O /tmp/ptre-rustup.sh
-            sh /tmp/ptre-rustup.sh -y --profile minimal --default-toolchain stable
-            export PATH="$HOME/.cargo/bin:$PATH"
-            rustup update stable
-            rustup default stable
-            rustup component add clippy rustfmt
-
-            echo 'Check linting'
-            cargo clippy --all-targets --all-features --locked -- -D warnings
-
-            echo 'Check code style'
-            ./format-code --check
-
-            # Resolve the latest Go 1.26 patch, matching actions/setup-go.
-            echo 'Set up Go 1.26'
-            wget -q 'https://go.dev/dl/?mode=json&include=all' -O /tmp/ptre-go-releases.json
-            go_archive="$(jq -er '[.[] | select(.stable and (.version | startswith("go1.26.")))][0].files[] | select(.os == "linux" and .arch == "amd64" and .kind == "archive") | .filename' /tmp/ptre-go-releases.json)"
-            go_sha256="$(jq -er --arg file "$go_archive" '.[] .files[] | select(.filename == $file) | .sha256' /tmp/ptre-go-releases.json)"
-            tool_dir="$(mktemp -d)"
-            wget -q "https://go.dev/dl/$go_archive" -O "$tool_dir/go.tar.gz"
-            echo "$go_sha256  $tool_dir/go.tar.gz" | sha256sum --check
-            tar -xzf "$tool_dir/go.tar.gz" -C "$tool_dir"
-            export GOROOT="$tool_dir/go"
-            export PATH="$GOROOT/bin:$PATH"
-
-            echo 'Install addlicense'
-            go install github.com/google/addlicense@latest
-            export PATH="$(go env GOPATH)/bin:$PATH"
-
-            echo 'Check license headers'
-            COPYRIGHT_EMAIL=root@charofstring.cc ./update-license --check
-
-            echo 'Check compilation'
-            cargo check --all-targets --all-features --locked
-            CHECKS
+      - .*
+notify: []
