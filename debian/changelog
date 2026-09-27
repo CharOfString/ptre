@@ -1,3 +1,13 @@
+ptre (0.1.2-1) unstable; urgency=medium
+
+  [ CharOfString ]
+  * Auto changing syntax hightlight language while file is saved.
+
+  [ Claude ]
+  * Added LSP plugin system.
+
+ -- CharOfString <root@charofstring.cc>  Sun, 27 Sep 2026 17:16:02 -0500
+
 ptre (0.1.1-2) unstable; urgency=medium
 
   * Fixed version string not bumped on top bar.
