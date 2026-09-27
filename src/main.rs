@@ -14,6 +14,7 @@
 
 mod app;
 mod buffers;
+mod keys;
 mod menu;
 
 use app::App;

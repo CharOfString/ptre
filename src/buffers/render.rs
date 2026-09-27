@@ -17,7 +17,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout},
     style::{Color, Style},
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 impl App {
@@ -25,7 +25,7 @@ impl App {
         let [menu_area, editor_area, status_bar_text_area] = Layout::vertical([
             Constraint::Length(2),
             Constraint::Min(0),
-            Constraint::Length(1),
+            Constraint::Length(2),
         ])
         .areas(frame.area());
         self.menu.draw_bar(frame, menu_area);
@@ -51,9 +51,13 @@ impl App {
         let border = Block::bordered()
             .border_type(BorderType::Rounded)
             .title(title);
-        self.editor_area = border.inner(editor_area);
+        let [content_area, buffer_status_area] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(2)])
+                .areas(border.inner(editor_area));
+        self.editor_area = content_area;
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
+        super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
         if self.save_path_input.is_none()
             && !self.overwrite_confirm
             && self.menu.active.is_none()
@@ -74,14 +78,34 @@ impl App {
                 .path
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
-            format!(
-                " {name} | {} chars | F10: menu | {}",
-                self.buffer.editor.code_ref().len_chars(),
-                self.status_bar_text
-            )
+
+            if self.status_bar_text.is_empty() {
+                if self.buffer_command.is_empty() {
+                    format!(" {name} ※  F10: menu")
+                } else {
+                    format!(
+                        " {name} ※  F10: menu ※  Buffer command: {}",
+                        self.buffer_command
+                    )
+                }
+            } else {
+                if self.buffer_command.is_empty() {
+                    format!(" {name} ※  F10: menu ※  {}", self.status_bar_text)
+                } else {
+                    format!(
+                        " {name} ※  F10: menu ※  Buffer command: {}  ※ {}",
+                        self.buffer_command, self.status_bar_text
+                    )
+                }
+            }
         };
         let status_bar_text = Paragraph::new(status_bar_text_text)
-            .style(Style::default().fg(Color::Black).bg(Color::Cyan));
+            .style(Style::default().fg(Color::Green))
+            .block(
+                Block::new()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(Color::Green)),
+            );
 
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);

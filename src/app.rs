@@ -34,6 +34,7 @@ pub(crate) struct App {
     pub(crate) overwrite_confirm: bool,
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
+    pub(crate) buffer_command: String,
 }
 
 // Implementation of the app struct
@@ -68,6 +69,13 @@ impl App {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) {
+        // Print key in buffer command section in bottom tool bar.
+        self.buffer_command = match crate::keys::shortcut_label(key, self.ctrl_x_wait_flag) {
+            Some(chord) if self.ctrl_x_wait_flag => format!("C-x {chord}"),
+            Some(chord) => chord,
+            None => String::new(),
+        };
+
         // Conformation modal "dialog" for overwriting document.
         if self.overwrite_confirm {
             match key.code {
@@ -187,7 +195,7 @@ impl App {
         // Reserve C-x for application commands rather than the editor's cut binding.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('x') {
             self.ctrl_x_wait_flag = true;
-            self.status_bar_text = "C-x pressed".into();
+            self.status_bar_text.clear();
             return;
         }
 
@@ -426,7 +434,7 @@ mod tests {
         app.buffer.obsolete = true;
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
         terminal.draw(|frame| app.draw(frame)).unwrap();
-        assert_eq!(app.editor_area, Rect::new(1, 3, 98, 19));
+        assert_eq!(app.editor_area, Rect::new(1, 3, 98, 16));
         let screen = terminal.backend().buffer();
         let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
         assert!(title.starts_with("╭─ [No Name] · Text"));
@@ -434,16 +442,53 @@ mod tests {
         assert!(title.contains("· OBSOLETE FILE"));
         assert_eq!(screen[(0, 2)].symbol(), "╭");
         assert_eq!(screen[(99, 2)].symbol(), "╮");
-        assert_eq!(screen[(0, 22)].symbol(), "╰");
-        assert_eq!(screen[(99, 22)].symbol(), "╯");
+        assert_eq!(screen[(0, 21)].symbol(), "╰");
+        assert_eq!(screen[(99, 21)].symbol(), "╯");
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
         assert!(status.contains("F10: menu"));
+        assert!(!status.contains("Buffer command"));
+        for x in 0..100 {
+            assert_eq!(screen[(x, 22)].symbol(), "─");
+            assert_eq!(screen[(x, 21)].fg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 22)].fg, ratatui::style::Color::Green);
+            assert_eq!(screen[(x, 22)].bg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 23)].bg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 23)].fg, ratatui::style::Color::Green);
+        }
         assert!(
             app.buffer
                 .editor
                 .get_visible_cursor(&app.editor_area)
                 .is_some()
         );
+    }
+
+    #[test]
+    fn echoes_emacs_shortcuts_after_menu_hint() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let mut app = App::default();
+        let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+        let status = |app: &mut App, terminal: &mut Terminal<TestBackend>| {
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            (0..100)
+                .map(|x| terminal.backend().buffer()[(x, 23)].symbol().to_owned())
+                .collect::<String>()
+        };
+        assert!(status(&mut app, &mut terminal).contains("F10: menu"));
+        assert!(!status(&mut app, &mut terminal).contains("Buffer command:"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
+        assert!(status(&mut app, &mut terminal).contains("Buffer command: C-x"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
+        assert!(status(&mut app, &mut terminal).contains("Buffer command: C-x u"));
+        app.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(!status(&mut app, &mut terminal).contains("Buffer command: C-x"));
+        app.handle_key(KeyEvent::new(
+            KeyCode::Char('_'),
+            KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SHIFT,
+        ));
+        assert!(status(&mut app, &mut terminal).contains("C-M-_"));
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        assert!(status(&mut app, &mut terminal).contains("F10"));
     }
 
     #[test]

@@ -22,7 +22,7 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph},
 };
 
-const LIGHT_BLUE: Color = Color::Rgb(155, 205, 245);
+pub(crate) const LIGHT_BLUE: Color = Color::Rgb(155, 205, 245);
 const FILE: &[(&str, &str)] = &[("Save", "C-x C-s"), ("Quit", "C-x C-c")];
 const EDIT: &[(&str, &str)] = &[
     ("Undo", "C-x u"),
