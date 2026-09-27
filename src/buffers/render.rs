@@ -37,12 +37,7 @@ impl App {
             .as_ref()
             .and_then(|path| path.file_name())
             .map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy());
-        let language = crate::utils::file_type::display_name(self.buffer.editor.code_ref().lang());
-        let mut title = format!("─ {name} · {language}");
-        if let Some(server) = self.completion.server_name() {
-            title.push_str(" · ");
-            title.push_str(server);
-        }
+        let mut title = format!("─ {name}");
 
         // Buffer indicators.
         if self.buffer.is_dirty() {

@@ -23,7 +23,7 @@ use crate::{
     app::App,
     lsp::{self, Candidate, Completions},
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 // Completion popup state and the language server feeding it.
 #[derive(Default)]
@@ -62,12 +62,6 @@ impl Completion {
     pub(crate) fn set_plugins(&mut self, plugins: Vec<lsp::Plugin>) {
         self.plugins = plugins;
         self.attached = None;
-    }
-
-    // Program name of the running language server, for the editor title.
-    pub(crate) fn server_name(&self) -> Option<&str> {
-        let client = self.client.as_ref().filter(|client| client.is_ready())?;
-        Path::new(&client.command()[0]).file_name()?.to_str()
     }
 
     fn open(&mut self, manual: bool) {
