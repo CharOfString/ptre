@@ -30,11 +30,13 @@ pub(crate) struct App {
     pub(crate) editor_area: Rect,
     exit_flag: bool,
     ctrl_x_wait_flag: bool,
+    pub(crate) ctrl_c_wait_flag: bool,
     kill_ring: Option<String>,
     pub(crate) overwrite_confirm: bool,
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
     pub(crate) buffer_command: String,
+    pub(crate) completion: crate::buffers::completion::Completion,
 }
 
 // Implementation of the app struct
@@ -52,11 +54,17 @@ impl App {
                 last_disk_check = Instant::now();
             }
 
-            // New frame
+            // Talk to the language server, then draw a new frame.
+            self.sync_lsp();
             terminal.draw(|frame| self.draw(frame))?;
 
             // Wait for event; ignore key release to avoid handling a keystroke twice.
-            if event::poll(interval.saturating_sub(last_disk_check.elapsed()))?
+            // Wake up sooner while a completion answer is expected.
+            let mut timeout = interval.saturating_sub(last_disk_check.elapsed());
+            if self.completion.is_waiting() {
+                timeout = timeout.min(Duration::from_millis(20));
+            }
+            if event::poll(timeout)?
                 && let Event::Key(key) = event::read()?
                 && key.kind != KeyEventKind::Release
             {
@@ -70,11 +78,13 @@ impl App {
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) {
         // Print key in buffer command section in bottom tool bar.
-        self.buffer_command = match crate::utils::keys::shortcut_label(key, self.ctrl_x_wait_flag) {
-            Some(chord) if self.ctrl_x_wait_flag => format!("C-x {chord}"),
-            Some(chord) => chord,
-            None => String::new(),
+        let prefix = match (self.ctrl_x_wait_flag, self.ctrl_c_wait_flag) {
+            (true, _) => "C-x ",
+            (_, true) => "C-c ",
+            _ => "",
         };
+        self.buffer_command = crate::utils::keys::shortcut_label(key, !prefix.is_empty())
+            .map_or_else(String::new, |chord| format!("{prefix}{chord}"));
 
         // Conformation modal "dialog" for overwriting document.
         if self.overwrite_confirm {
@@ -136,6 +146,10 @@ impl App {
                 }
                 _ => {}
             }
+            return;
+        }
+
+        if !self.ctrl_x_wait_flag && self.menu.active.is_none() && self.handle_completion_key(key) {
             return;
         }
 
@@ -230,7 +244,8 @@ impl App {
                     self.buffer.editor.apply(InsertText { text: text.clone() });
                 }
             }
-            (KeyCode::Char('c' | 'v'), KeyModifiers::CONTROL) => return,
+            // C-c is a prefix handled with completion; C-v stays unbound.
+            (KeyCode::Char('v'), KeyModifiers::CONTROL) => return,
             (KeyCode::Char('Z' | 'z'), modifiers)
                 if modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT =>
             {

@@ -31,6 +31,26 @@ const EDIT: &[(&str, &str)] = &[
     ("Copy", "M-w"),
     ("Paste", "C-y"),
 ];
+const MENUS: [&str; 3] = ["FILE", "EDIT", "LSP"];
+
+// Entries of one menu. The LSP menu shows whether completion pops up while typing.
+fn items(menu: usize, auto_completion: bool) -> Vec<(&'static str, &'static str)> {
+    match menu {
+        0 => FILE.to_vec(),
+        1 => EDIT.to_vec(),
+        _ => vec![
+            (
+                if auto_completion {
+                    "Auto Complete: On"
+                } else {
+                    "Auto Complete: Off"
+                },
+                "C-c M-l",
+            ),
+            ("Complete", "M-/"),
+        ],
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct Menu {
@@ -49,7 +69,7 @@ impl Menu {
         ];
 
         // App menu
-        for (index, name) in ["FILE", "EDIT"].into_iter().enumerate() {
+        for (index, name) in MENUS.into_iter().enumerate() {
             let style = base.add_modifier(Modifier::BOLD);
             let indicator = if self.active == Some(index) {
                 "❃ "
@@ -85,14 +105,14 @@ impl Menu {
     }
 
     // Popup menu.
-    pub(crate) fn draw_popup(&self, frame: &mut Frame) {
+    pub(crate) fn draw_popup(&self, frame: &mut Frame, auto_completion: bool) {
         let Some(active) = self.active else { return };
         let screen = frame.area();
         if screen.height <= 1 || screen.width == 0 {
             return;
         }
 
-        let items = if active == 0 { FILE } else { EDIT };
+        let items = items(active, auto_completion);
         let label_width = items
             .iter()
             .map(|(label, _)| label.len())
@@ -108,7 +128,9 @@ impl Menu {
         // Borders, selection indicator, side padding, and a two-column gap.
         let width = (label_width + shortcut_width + 7) as u16;
         let width = width.min(screen.width);
-        let offset = 10 + env!("CARGO_PKG_VERSION").len() as u16 + active as u16 * 8;
+        // Each menu name takes its length plus four columns of indicator and padding.
+        let before: usize = MENUS[..active].iter().map(|name| name.len() + 4).sum();
+        let offset = (10 + env!("CARGO_PKG_VERSION").len() + before) as u16;
         let area = Rect::new(
             screen.x + offset.min(screen.width.saturating_sub(width)),
             screen.y + 1,
@@ -167,11 +189,16 @@ impl App {
             return false;
         };
 
-        let count = if active == 0 { FILE.len() } else { EDIT.len() };
+        let count = items(active, true).len();
         match key.code {
             KeyCode::Esc => self.menu.active = None,
             KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
-                self.menu.active = Some(1 - active);
+                let step = if key.code == KeyCode::Left {
+                    MENUS.len() - 1
+                } else {
+                    1
+                };
+                self.menu.active = Some((active + step) % MENUS.len());
                 self.menu.selected = 0;
             }
             KeyCode::Down => self.menu.selected = (self.menu.selected + 1) % count,
@@ -180,24 +207,28 @@ impl App {
                 let selected = self.menu.selected;
                 self.menu.active = None;
                 let ctrl = KeyModifiers::CONTROL;
+                let alt = KeyModifiers::ALT;
                 if active == 0 {
                     self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
                     self.handle_key(KeyEvent::new(
                         KeyCode::Char(if selected == 0 { 's' } else { 'c' }),
                         ctrl,
                     ));
+                } else if active == 2 {
+                    if selected == 0 {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
+                        self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));
+                    } else {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
+                    }
                 } else {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE));
                         return true;
                     }
-                    let (code, modifiers) = [
-                        ('_', ctrl | KeyModifiers::ALT),
-                        ('w', ctrl),
-                        ('w', KeyModifiers::ALT),
-                        ('y', ctrl),
-                    ][selected - 1];
+                    let (code, modifiers) =
+                        [('_', ctrl | alt), ('w', ctrl), ('w', alt), ('y', ctrl)][selected - 1];
                     self.handle_key(KeyEvent::new(KeyCode::Char(code), modifiers));
                 }
             }
@@ -244,7 +275,7 @@ mod tests {
 
     #[test]
     fn active_menu_and_popup_use_markers_without_underlines() {
-        for active in 0..2 {
+        for active in 0..3 {
             let mut app = App::default();
             app.menu.active = Some(active);
             let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -252,9 +283,9 @@ mod tests {
             let screen = terminal.backend().buffer();
             let popup_x = 10 + env!("CARGO_PKG_VERSION").len() as u16 + active as u16 * 8;
             let label: String = (0..80).map(|x| screen[(x, 0)].symbol()).collect();
-            assert!(label.contains(if active == 0 { "❃ FILE" } else { "❃ EDIT" }));
+            assert!(label.contains(&format!("❃ {}", MENUS[active])));
             assert_eq!(screen[(popup_x, 1)].symbol(), "╭");
-            let popup_width = if active == 0 { 18 } else { 17 };
+            let popup_width = [18, 17, 31][active];
             assert_eq!(screen[(popup_x + popup_width - 1, 1)].symbol(), "╮");
             assert_eq!(screen[(popup_x + 1, 2)].symbol(), "·");
             assert_eq!(screen[(popup_x + 1, 3)].symbol(), " ");
@@ -307,10 +338,48 @@ mod tests {
     }
 
     #[test]
+    fn lsp_menu_toggles_auto_completion_and_opens_popup() {
+        let mut app = App::default();
+        app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.menu.active, Some(2));
+        app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        assert_eq!(app.menu.active, Some(0));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert_eq!(app.menu.active, Some(2));
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let row = |app: &mut App, terminal: &mut Terminal<TestBackend>| {
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            (0..80)
+                .map(|x| terminal.backend().buffer()[(x, 2)].symbol().to_owned())
+                .collect::<String>()
+        };
+        assert!(row(&mut app, &mut terminal).contains("Auto Complete: On  C-c M-l"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(!app.completion.auto_enabled());
+        assert!(app.menu.active.is_none());
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        assert!(row(&mut app, &mut terminal).contains("Auto Complete: Off  C-c M-l"));
+
+        app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        for c in "hello he".chars() {
+            app.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+        }
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.buffer.editor.get_content(), "hello hello");
+    }
+
+    #[test]
     fn tiny_terminals_do_not_panic() {
         for (width, height) in [(1, 1), (5, 2), (20, 4)] {
             let mut app = App::default();
-            app.menu.active = Some(1);
+            app.menu.active = Some(2);
             let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
             terminal.draw(|frame| app.draw(frame)).unwrap();
         }

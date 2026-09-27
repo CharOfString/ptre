@@ -39,6 +39,10 @@ impl App {
             .map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy());
         let language = crate::utils::file_type::display_name(self.buffer.editor.code_ref().lang());
         let mut title = format!("─ {name} · {language}");
+        if let Some(server) = self.completion.server_name() {
+            title.push_str(" · ");
+            title.push_str(server);
+        }
 
         // Buffer indicators.
         if self.buffer.is_dirty() {
@@ -59,6 +63,7 @@ impl App {
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
         super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
+        self.draw_completion(frame);
         if self.save_path_input.is_none()
             && !self.overwrite_confirm
             && self.menu.active.is_none()
@@ -111,7 +116,7 @@ impl App {
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
 
-        self.menu.draw_popup(frame);
+        self.menu.draw_popup(frame, self.completion.auto_enabled());
 
         if self.overwrite_confirm {
             super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());

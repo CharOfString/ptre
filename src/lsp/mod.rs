@@ -12,9 +12,17 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-pub(crate) mod completion;
-mod dialog;
-pub(crate) mod editor;
-mod editor_status;
-pub(crate) mod menu;
-mod render;
+// A minimal Language Server Protocol client: enough to open one document, keep it in sync and
+// ask for completions. Which server runs for which language comes from plugin files (see
+// `plugin`); server differences are absorbed in `normalize`.
+
+mod client;
+mod normalize;
+mod plugin;
+mod position;
+mod transport;
+mod workspace;
+
+pub(crate) use client::Client;
+pub(crate) use normalize::{Candidate, Completions};
+pub(crate) use plugin::{Plugin, language_id, load as load_plugins};
