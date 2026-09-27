@@ -1,3 +1,9 @@
+ptre (0.1.0-2) unstable; urgency=medium
+
+  * Removed dbgsym and SHA256 checksum from CI release pushing.
+
+ -- CharOfString <root@charofstring.cc>  Sat, 26 Sep 2026 20:47:11 -0500
+
 ptre (0.1.0-1) unstable; urgency=medium
 
   * Initial Debian package.
