@@ -75,15 +75,27 @@ jobs:
                 filename="$(basename "$package" .deb)"
                 cp "$package" "dist/${filename}_${BUILD_DISTRO}.deb"
               done
-              cd dist
-              sha256sum -- *.deb > "SHA256SUMS-${BUILD_DISTRO}-${BUILD_ARCH}"
             '
+
+      - name: Remove dbgsym packages
+        run: |
+          shopt -s nullglob
+          dbgsym_packages=(dist/*-dbgsym_*.deb)
+          if (( ${#dbgsym_packages[@]} > 0 )); then
+            printf 'Removing debug symbol packages:\n%s\n' "${dbgsym_packages[@]}"
+            rm -- "${dbgsym_packages[@]}"
+          fi
+          packages=(dist/*.deb)
+          if (( ${#packages[@]} == 0 )); then
+            echo '::error::No non-dbgsym Debian packages were built.'
+            exit 1
+          fi
 
       - name: Save build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: debian-packages-${{ matrix.distro }}-${{ matrix.arch }}
-          path: dist/
+          path: dist/*.deb
           if-no-files-found: error
 
       - name: Upload to the corresponding release if it exists
@@ -99,7 +111,7 @@ jobs:
             "$GITHUB_API_URL/repos/$GH_REPO/releases/tags/$encoded_tag")"
           case "$status" in
             200)
-              gh release upload "$RELEASE_TAG" dist/* --clobber
+              gh release upload "$RELEASE_TAG" dist/*.deb --clobber
               ;;
             404)
               if [[ "$GITHUB_EVENT_NAME" == release ]]; then
