@@ -14,6 +14,7 @@
 
 mod app;
 mod buffers;
+mod lsp;
 mod utils;
 
 use app::App;
@@ -21,8 +22,16 @@ use std::{ffi::OsString, io, path::PathBuf};
 
 // Main app of Pointer.
 fn main() -> io::Result<()> {
-    // Attempt to open the passed in file, if any.
     let mut app = App::default();
+
+    // Language server plugins; a broken plugin file is reported but does not stop ptre.
+    let (plugins, errors) = lsp::load_plugins();
+    app.completion.set_plugins(plugins);
+    if let Some(error) = errors.first() {
+        app.status_bar_text = format!("Plugin error: {error}");
+    }
+
+    // Attempt to open the passed in file, if any.
     if let Some(path) = file_argument(std::env::args_os().skip(1))? {
         app.buffer.open(path)?;
     }
