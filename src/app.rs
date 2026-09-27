@@ -80,13 +80,13 @@ impl App {
                         Err(err) => self.status_bar_text = format!("Save failed: {err}"),
                     }
                 }
-                
+
                 // Press N or ESC to cancel.
                 KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                     self.overwrite_confirm = false;
                     self.status_bar_text = "Save cancelled".into();
                 }
-                
+
                 // Ignoring all other inputs.
                 _ => {}
             }
@@ -364,8 +364,10 @@ mod tests {
     #[test]
     fn confirmation_dialog_is_rendered_over_editor() {
         use ratatui::{Terminal, backend::TestBackend};
-        let mut app = App::default();
-        app.overwrite_confirm = true;
+        let mut app = App {
+            overwrite_confirm: true,
+            ..App::default()
+        };
         let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
         terminal.draw(|frame| app.draw(frame)).unwrap();
         let screen = terminal.backend().buffer();
@@ -373,7 +375,7 @@ mod tests {
             .flat_map(|y| (0..80).map(move |x| screen[(x, y)].symbol().to_owned()))
             .collect();
         assert!(text.contains("Confirm overwrite"));
-        assert!(text.contains("File changed on disk. Overwrite it?"));
+        assert!(text.contains("File has been changed on disk. Overwrite it?"));
         assert!(text.contains("Y/ENTER"));
     }
 
@@ -388,8 +390,8 @@ mod tests {
         assert_eq!(app.editor_area, Rect::new(1, 1, 98, 21));
         let screen = terminal.backend().buffer();
         let title: String = (0..100).map(|x| screen[(x, 0)].symbol()).collect();
-        assert!(title.contains("·DIRTY BUFFER"));
-        assert!(title.contains("·OBSOLETE FILE"));
+        assert!(title.contains("· DIRTY BUFFER"));
+        assert!(title.contains("· OBSOLETE FILE"));
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
         assert!(status.contains("C-x C-c: quit"));
         assert!(

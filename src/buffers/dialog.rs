@@ -12,7 +12,6 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use std::path::Path;
 use ratatui::{
     Frame,
     layout::{Alignment, Rect},
@@ -20,6 +19,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
 };
+use std::path::Path;
 
 pub(super) fn draw_overwrite(frame: &mut Frame, path: Option<&Path>) {
     let area = frame.area();
