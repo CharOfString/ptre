@@ -54,9 +54,12 @@ jobs:
           BUILD_DISTRO: ${{ matrix.distro }}
           BUILD_ARCH: ${{ matrix.arch }}
         run: |
+          host_uid="$(id -u)"
+          host_gid="$(id -g)"
           docker run --rm \
             -e DEBIAN_FRONTEND=noninteractive \
             -e BUILD_DISTRO -e BUILD_ARCH \
+            -e HOST_UID="$host_uid" -e HOST_GID="$host_gid" \
             -v "$GITHUB_WORKSPACE:/build/ptre" \
             -w /build/ptre "$BUILD_IMAGE" bash -euo pipefail -c '
               test "$(dpkg --print-architecture)" = "$BUILD_ARCH"
@@ -75,6 +78,8 @@ jobs:
                 filename="$(basename "$package" .deb)"
                 cp "$package" "dist/${filename}_${BUILD_DISTRO}.deb"
               done
+              # Subsequent workflow steps run as the host runner, not container root.
+              chown -R "$HOST_UID:$HOST_GID" dist
             '
 
       - name: Remove dbgsym packages
