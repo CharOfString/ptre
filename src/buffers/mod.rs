@@ -14,3 +14,4 @@
 
 pub(crate) mod editor;
 mod render;
+mod dialog;
