@@ -1,3 +1,9 @@
+ptre (0.1.2-2) unstable; urgency=medium
+
+  * Enhanced completion menu UI
+
+ -- CharOfString <root@charofstring.cc>  Sun, 27 Sep 2026 17:35:14 -0500
+
 ptre (0.1.2-1) unstable; urgency=medium
 
   [ CharOfString ]
