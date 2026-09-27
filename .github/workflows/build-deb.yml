@@ -1,0 +1,115 @@
+name: Build Debian packages
+
+on:
+  push:
+    tags:
+      - '**'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# Serialize tag/release runs for the same tag to avoid competing asset uploads.
+concurrency:
+  group: build-deb-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.distro }} / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu-24.04, ubuntu-22.04, debian-trixie]
+        arch: [amd64, arm64]
+        include:
+          - distro: ubuntu-24.04
+            image: ubuntu:24.04
+          - distro: ubuntu-22.04
+            image: ubuntu:22.04
+          - distro: debian-trixie
+            image: debian:trixie
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      # Build against each distribution's libraries on a native-architecture
+      # runner. Keep release tooling on the host, outside the build container.
+      - name: Build Debian packages
+        env:
+          BUILD_IMAGE: ${{ matrix.image }}
+          BUILD_DISTRO: ${{ matrix.distro }}
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e BUILD_DISTRO -e BUILD_ARCH \
+            -v "$GITHUB_WORKSPACE:/build/ptre" \
+            -w /build/ptre "$BUILD_IMAGE" bash -euo pipefail -c '
+              test "$(dpkg --print-architecture)" = "$BUILD_ARCH"
+              apt-get update
+              apt-get install -y build-essential debhelper dpkg-dev ca-certificates curl
+              apt-get build-dep -y .
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
+              # Distro cargo/rustc satisfy Build-Depends; rustup supplies stable.
+              RUSTUP_INIT_SKIP_PATH_CHECK=yes sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable
+              export PATH="/root/.cargo/bin:$PATH"
+
+              # debian/rules also runs the release tests.
+              dpkg-buildpackage -us -uc -b
+              mkdir -p dist
+              for package in ../*.deb; do
+                filename="$(basename "$package" .deb)"
+                cp "$package" "dist/${filename}_${BUILD_DISTRO}.deb"
+              done
+              cd dist
+              sha256sum -- *.deb > "SHA256SUMS-${BUILD_DISTRO}-${BUILD_ARCH}"
+            '
+
+      - name: Save build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-packages-${{ matrix.distro }}-${{ matrix.arch }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload to the corresponding release if it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          encoded_tag="$(jq -rn --arg tag "$RELEASE_TAG" '$tag | @uri')"
+          status="$(curl --silent --show-error --retry 3 \
+            --output "$RUNNER_TEMP/ptre-release.json" --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/repos/$GH_REPO/releases/tags/$encoded_tag")"
+          case "$status" in
+            200)
+              gh release upload "$RELEASE_TAG" dist/* --clobber
+              ;;
+            404)
+              if [[ "$GITHUB_EVENT_NAME" == release ]]; then
+                echo '::error::The triggering release could not be found.'
+                exit 1
+              fi
+              echo 'No release exists for this tag; packages are available in Actions artifacts.'
+              ;;
+            *)
+              echo "::error::Release lookup failed (HTTP $status)."
+              exit 1
+              ;;
+          esac
