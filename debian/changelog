@@ -1,3 +1,10 @@
+ptre (0.1.1-2) unstable; urgency=medium
+
+  * Fixed version string not bumped on top bar.
+  * organized repository
+
+ -- CharOfString <root@charofstring.cc>  Sun, 27 Sep 2026 01:28:21 -0500
+
 ptre (0.1.1-1) unstable; urgency=medium
 
   * File type indicator.
