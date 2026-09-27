@@ -50,6 +50,7 @@ impl App {
         title.push(' ');
         let border = Block::bordered()
             .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(Color::White))
             .title(title);
         let [content_area, buffer_status_area] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(2)])

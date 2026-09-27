@@ -444,12 +444,15 @@ mod tests {
         assert_eq!(screen[(99, 2)].symbol(), "╮");
         assert_eq!(screen[(0, 21)].symbol(), "╰");
         assert_eq!(screen[(99, 21)].symbol(), "╯");
+        assert_eq!(screen[(0, 2)].fg, ratatui::style::Color::White);
+        assert_eq!(screen[(0, 10)].fg, ratatui::style::Color::White);
+        assert_eq!(screen[(99, 10)].fg, ratatui::style::Color::White);
         let status: String = (0..100).map(|x| screen[(x, 23)].symbol()).collect();
         assert!(status.contains("F10: menu"));
         assert!(!status.contains("Buffer command"));
         for x in 0..100 {
             assert_eq!(screen[(x, 22)].symbol(), "─");
-            assert_eq!(screen[(x, 21)].fg, ratatui::style::Color::Reset);
+            assert_eq!(screen[(x, 21)].fg, ratatui::style::Color::White);
             assert_eq!(screen[(x, 22)].fg, ratatui::style::Color::Green);
             assert_eq!(screen[(x, 22)].bg, ratatui::style::Color::Reset);
             assert_eq!(screen[(x, 23)].bg, ratatui::style::Color::Reset);
