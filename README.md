@@ -1,5 +1,7 @@
-# Pointer
-Pointer is a currently under developing (we just started it) lightweight text editor in Rust.
+# Pointer Editor
+*Pointer Editor* (we'll call it Pointer or `ptre` in the rest of the document) is a currently under developing (we just started it) lightweight text editor in Rust.
+
+![Screenshot](./doc/imgs/screenshot.png)
 
 ## Build & Run
 Please have Rust & Cargo ready, then you may use the following command to build:
