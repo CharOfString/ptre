@@ -1,3 +1,9 @@
+ptre (0.1.0-3) unstable; urgency=medium
+
+  * Fixed trixie building issue.
+
+ -- CharOfString <root@charofstring.cc>  Sat, 26 Sep 2026 21:02:02 -0500
+
 ptre (0.1.0-2) unstable; urgency=medium
 
   * Removed dbgsym and SHA256 checksum from CI release pushing.
