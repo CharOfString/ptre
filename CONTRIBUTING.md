@@ -27,6 +27,22 @@ asking AI to port something here.
 * You'll be responsible for the AI generated contents.
 
 ### Issues
+#### Title
+we use prefix for the issue title, here is the list of prefix preferred:
+- **suggestion**: Your suggestion to `ptre`.
+- **question**: Asking an question.
+- **bug**: A bug you found.
+- **featreq**: Requiring new feature(s).
+
+Here are some examples:
+```
+suggestion: Improving the issue title
+question: Does ptre suppot Windows?
+bug: Auto completion failed on XXXX
+featreq: Consider adding AmberPM packaging
+```
+
+#### Content
 * Please do not post duplicate issues.
 * Please only mention one things in the issue.
 * We regularly check the issues page, so please do not @mention maintainers in issues urge progress.
