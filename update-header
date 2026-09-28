@@ -7,7 +7,7 @@ cd -- "$ROOT"
 
 usage() {
     cat <<'HELP'
-Usage: ./update_license [--check]
+Usage: ./update-header [--check]
 
 Add missing license headers to Rust files under src/.
 --check checks for missing headers without modifying files.
