@@ -34,8 +34,12 @@ const EDIT: &[(&str, &str)] = &[
 const MENUS: [&str; 3] = ["FILE", "EDIT", "LSP"];
 
 // Entries of one menu. The LSP menu shows whether completion pops up while typing.
-fn items(menu: usize, auto_completion: bool) -> Vec<(&'static str, &'static str)> {
-    match menu {
+fn items(
+    menu: usize,
+    auto_completion: bool,
+    cpp: Option<&super::cpp_checks::settings::Settings>,
+) -> Vec<(&'static str, &'static str)> {
+    let mut entries = match menu {
         0 => FILE.to_vec(),
         1 => EDIT.to_vec(),
         _ => vec![
@@ -49,7 +53,34 @@ fn items(menu: usize, auto_completion: bool) -> Vec<(&'static str, &'static str)
             ),
             ("Complete", "M-/"),
         ],
+    };
+
+    // The LSP menu
+    if menu == 2
+        && let Some(settings) = cpp
+    {
+        entries.extend([
+            (
+                if settings.tidy {
+                    "Clang-tidy: On"
+                } else {
+                    "Clang-tidy: Off"
+                },
+                "",
+            ),
+            (
+                if settings.cpplint {
+                    "Cpplint: On"
+                } else {
+                    "Cpplint: Off"
+                },
+                "",
+            ),
+            ("Run Clang-tidy", "C-c t"),
+            ("Run Cpplint", "C-c l"),
+        ]);
     }
+    entries
 }
 
 #[derive(Default)]
@@ -105,14 +136,19 @@ impl Menu {
     }
 
     // Popup menu.
-    pub(crate) fn draw_popup(&self, frame: &mut Frame, auto_completion: bool) {
+    pub(crate) fn draw_popup(
+        &self,
+        frame: &mut Frame,
+        auto_completion: bool,
+        cpp: Option<&super::cpp_checks::settings::Settings>,
+    ) {
         let Some(active) = self.active else { return };
         let screen = frame.area();
         if screen.height <= 1 || screen.width == 0 {
             return;
         }
 
-        let items = items(active, auto_completion);
+        let items = items(active, auto_completion, cpp);
         let label_width = items
             .iter()
             .map(|(label, _)| label.len())
@@ -189,7 +225,12 @@ impl App {
             return false;
         };
 
-        let count = items(active, true).len();
+        let count = items(
+            active,
+            true,
+            self.is_cpp().then_some(&self.cpp_checks.settings),
+        )
+        .len();
         match key.code {
             KeyCode::Esc => self.menu.active = None,
             KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
@@ -218,8 +259,17 @@ impl App {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));
-                    } else {
+                    } else if selected == 1 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
+                    } else {
+                        use super::cpp_checks::Tool;
+                        match selected {
+                            2 => self.toggle_cpp_check(Tool::Tidy),
+                            3 => self.toggle_cpp_check(Tool::Cpplint),
+                            4 => self.run_cpp_check(Tool::Tidy),
+                            5 => self.run_cpp_check(Tool::Cpplint),
+                            _ => {}
+                        }
                     }
                 } else {
                     if selected == 0 {
@@ -242,6 +292,18 @@ impl App {
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn cpp_checks_only_appear_in_cpp_menu() {
+        let settings = super::super::cpp_checks::settings::Settings::default();
+        assert_eq!(items(2, true, None).len(), 2);
+        let cpp = items(2, true, Some(&settings));
+        assert_eq!(cpp[2], ("Clang-tidy: Off", ""));
+        assert_eq!(cpp[3], ("Cpplint: Off", ""));
+        assert_eq!(cpp[4], ("Run Clang-tidy", "C-c t"));
+        assert_eq!(cpp[5], ("Run Cpplint", "C-c l"));
+        assert_eq!(items(0, true, Some(&settings)), FILE);
+    }
 
     #[test]
     fn renders_light_blue_menu_and_separator() {

@@ -70,7 +70,7 @@ impl Completion {
         self.manual = manual;
     }
 
-    fn close(&mut self) {
+    pub(crate) fn close(&mut self) {
         self.active = false;
         self.waiting = None;
         self.candidates.clear();

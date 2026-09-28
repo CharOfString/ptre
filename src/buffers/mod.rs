@@ -13,6 +13,7 @@
 // not, see <https://www.gnu.org/licenses/>.
 
 pub(crate) mod completion;
+pub(crate) mod cpp_checks;
 mod dialog;
 pub(crate) mod editor;
 mod editor_status;

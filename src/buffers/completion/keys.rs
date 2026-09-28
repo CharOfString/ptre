@@ -28,11 +28,18 @@ impl App {
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
 
-        // C-c starts a mode-specific chord; the LSP commands are the only ones so far.
+        // C-c starts a mode-specific command.
         if self.ctrl_c_wait_flag {
             self.ctrl_c_wait_flag = false;
             if key.code == KeyCode::Char('l') && alt {
                 self.toggle_auto_completion();
+            } else if key.modifiers.is_empty() {
+                use crate::buffers::cpp_checks::Tool;
+                match key.code {
+                    KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
+                    KeyCode::Char('t') => self.run_cpp_check(Tool::Tidy),
+                    _ => {}
+                }
             }
             return true;
         }

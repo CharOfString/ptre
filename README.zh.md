@@ -75,6 +75,16 @@ $ ./build-deb -c
 #### 行为
 如果该语言服务器的二进制可执行文件未找到，则会放弃使用语言服务器，转而改用当前文件里的单词来补全。
 
+## C++ 检查
+仅在 C++ 模式下，LSP 菜单显示独立的 Clang-tidy 和 Cpplint 开关，默认均关闭。首次启用 Cpplint 时需要输入其可执行文件路径，支持空格和 `~/`。
+
+* **Cpplint**：先按 `Ctrl + C`，再按普通的 `l`。
+* **Clang-tidy**：先按 `Ctrl + C`，再按普通的 `t`；需要在 `PATH` 中安装 `clang-tidy`。
+
+检查前请先保存缓冲区。检查在后台运行，不修改文件。结果窗口显示标准输出、错误输出和退出状态，使用方向键或 PageUp/PageDown 滚动，Esc 关闭。Clang-tidy 使用其常规项目配置；ptre 不额外传入编译参数或自动应用修复。
+
+开关和 Cpplint 路径保存在 `$XDG_CONFIG_HOME/ptre/cpp-checks.json`，未设置时使用 `~/.config/ptre/cpp-checks.json`。可修改其中的 `cpplint_path`，在下次启动时使用新的路径。
+
 ## 依赖
 特别感谢以下库：
 * **Crossterm-rs**: https://github.com/crossterm-rs/crossterm

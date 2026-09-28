@@ -78,6 +78,16 @@ The file name is just the language name, while the extension name is `.conf`. Av
 #### Behavior
 If the lsp ELF is NOT found, `ptre` will skip using the current LSP and only uses the context from current file to do the completion.
 
+## C++ Checks
+In C++ mode, the LSP menu offers separate Clang-tidy and Cpplint switches. Both are off by default. Enabling Cpplint for the first time asks for its executable path (spaces and `~/` are supported).
+
+* **Cpplint**: `Ctrl + C`, then plain `l`.
+* **Clang-tidy**: `Ctrl + C`, then plain `t`; `clang-tidy` must be on `PATH`.
+
+Save the buffer before checking. Checks run in the background without changing the file. Results include stdout, stderr and exit status; use Up/Down or PageUp/PageDown to scroll and Esc to close. Clang-tidy uses its normal project configuration; ptre does not add compiler flags or apply fixes.
+
+Switches and the Cpplint path are saved in `$XDG_CONFIG_HOME/ptre/cpp-checks.json` (fallback: `~/.config/ptre/cpp-checks.json`). Edit `cpplint_path` there to change the executable for the next session.
+
 ## Dependencies
 Special thanks to these libraries:
 * **Crossterm-rs**: https://github.com/crossterm-rs/crossterm

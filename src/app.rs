@@ -36,6 +36,7 @@ pub(crate) struct App {
     pub(crate) save_path_input: Option<String>,
     pub(crate) status_bar_text: String,
     pub(crate) buffer_command: String,
+    pub(crate) cpp_checks: crate::buffers::cpp_checks::Checks,
     pub(crate) completion: crate::buffers::completion::Completion,
 }
 
@@ -56,6 +57,10 @@ impl App {
 
             // Talk to the language server, then draw a new frame.
             self.sync_lsp();
+            if !self.ctrl_x_wait_flag && !self.ctrl_c_wait_flag {
+                self.poll_cpp_check();
+            }
+
             terminal.draw(|frame| self.draw(frame))?;
 
             // Wait for event; ignore key release to avoid handling a keystroke twice.
@@ -85,6 +90,10 @@ impl App {
         };
         self.buffer_command = crate::utils::keys::shortcut_label(key, !prefix.is_empty())
             .map_or_else(String::new, |chord| format!("{prefix}{chord}"));
+
+        if self.handle_cpp_check_key(key) {
+            return;
+        }
 
         // Conformation modal "dialog" for overwriting document.
         if self.overwrite_confirm {
