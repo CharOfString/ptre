@@ -13,7 +13,6 @@
 // not, see <https://www.gnu.org/licenses/>.
 
 /// Errors and warnings the server reports with textDocument/publishDiagnostics.
-
 use super::position::{Encoding, to_offset};
 use lsp_types::DiagnosticSeverity;
 use serde_json::Value;

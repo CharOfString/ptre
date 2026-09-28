@@ -58,7 +58,14 @@ impl App {
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
         self.draw_diagnostics(frame);
-        super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
+        super::editor_status::draw(
+            &self.buffer.editor,
+            self.diagnostic_counts(),
+            frame,
+            buffer_status_area,
+            editor_area,
+        );
+    
         self.draw_completion(frame);
         self.draw_diagnostic_popup(frame);
         if !self.cpp_check_modal()
