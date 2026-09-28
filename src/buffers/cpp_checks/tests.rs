@@ -215,3 +215,43 @@ fn cpplint_shortcut_needs_an_executable_path() {
         assert!(app.cpp_checks.pending.is_none(), "{path:?}");
     }
 }
+
+#[test]
+fn cpplint_findings_show_in_the_editor_until_the_text_changes() {
+    use ratatui::{Terminal, backend::TestBackend};
+    use std::os::unix::fs::PermissionsExt;
+    let dir = Directory::new();
+    let mut app = cpp_app(&dir);
+    let executable = dir.0.join("cpplint");
+    let script = "#!/bin/sh\necho \"$1:1:  Missing space before {  [whitespace/braces] [5]\" >&2\n";
+    std::fs::write(&executable, script).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    app.cpp_checks.settings.cpplint = true;
+    app.cpp_checks.settings.cpplint_path = executable.display().to_string();
+    app.run_cpp_check(Tool::Cpplint);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while app.cpp_checks.pending.is_some() && std::time::Instant::now() < deadline {
+        app.poll_cpp_check();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let findings = app.cpplint_diagnostics();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].range, 0..13, "the code of `int main() {{}}`");
+
+    // After closing the report, the finding is marked and explained at the cursor.
+    press(&mut app, KeyCode::Esc);
+    app.buffer.editor.set_cursor(4);
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    let screen = terminal.backend().buffer();
+    let text: String = (0..24)
+        .flat_map(|y| (0..80).map(move |x| (x, y)))
+        .map(|cell| screen[cell].symbol())
+        .collect();
+    assert!(text.contains("int main() {}  Missing space before {"));
+    assert!(text.contains("warning: Missing space before {"));
+
+    // Editing may move the lines, so the findings hide until Cpplint runs again.
+    press(&mut app, KeyCode::Char('x'));
+    assert!(app.cpplint_diagnostics().is_empty());
+}

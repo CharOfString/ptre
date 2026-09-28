@@ -14,6 +14,7 @@
 
 pub(crate) mod completion;
 pub(crate) mod cpp_checks;
+mod diagnostics;
 mod dialog;
 pub(crate) mod editor;
 mod editor_status;

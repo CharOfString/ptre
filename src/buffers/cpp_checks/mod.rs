@@ -12,12 +12,13 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
+mod cpplint;
 pub(super) mod settings;
 #[cfg(test)]
 mod tests;
 mod ui;
 
-use crate::app::App;
+use crate::{app::App, lsp::Diagnostic};
 use settings::{Settings, settings_path};
 use std::{io, path::PathBuf, process::Command, sync::mpsc};
 
@@ -42,8 +43,13 @@ pub(crate) struct Checks {
     config_path: Option<PathBuf>,
     pub(crate) path_input: Option<String>,
     pending: Option<mpsc::Receiver<String>>,
+    // The running check: its tool, the file and the text it checks.
+    checking: Option<(Tool, PathBuf, String)>,
     report: Option<String>,
     scroll: u16,
+    // Findings of the last Cpplint run, and the text they were found in.
+    cpplint_diagnostics: Vec<Diagnostic>,
+    cpplint_text: String,
 }
 
 impl App {
@@ -54,6 +60,21 @@ impl App {
                 Ok(settings) => self.cpp_checks.settings = settings,
                 Err(error) => self.status_bar_text = format!("C++ preferences: {error}"),
             }
+        }
+    }
+
+    // Cpplint findings, while Cpplint is on and the buffer still holds the text it checked.
+    // After an edit their lines may be wrong, so they stay hidden until the next run.
+    pub(crate) fn cpplint_diagnostics(&self) -> &[Diagnostic] {
+        let checks = &self.cpp_checks;
+        let current = checks.settings.cpplint
+            && !checks.cpplint_diagnostics.is_empty()
+            && self.is_c_or_cpp()
+            && checks.cpplint_text == self.buffer.editor.get_content();
+        if current {
+            &checks.cpplint_diagnostics
+        } else {
+            &[]
         }
     }
 
@@ -142,6 +163,8 @@ impl App {
             Tool::Cpplint => settings.cpplint_path.clone(),
         };
         let (sender, receiver) = mpsc::channel();
+        let text = self.buffer.editor.get_content();
+        self.cpp_checks.checking = Some((tool, path.clone(), text));
 
         // Run without a shell so spaces and shell characters in paths stay literal.
         std::thread::spawn(move || {
@@ -180,6 +203,11 @@ impl App {
             Err(mpsc::TryRecvError::Disconnected) => "C++ check worker stopped".into(),
         };
         self.cpp_checks.pending = None;
+        // Cpplint findings are also shown in the editor.
+        if let Some((Tool::Cpplint, path, text)) = self.cpp_checks.checking.take() {
+            self.cpp_checks.cpplint_diagnostics = cpplint::parse(&report, &path, &text);
+            self.cpp_checks.cpplint_text = text;
+        }
         self.completion.close();
         self.cpp_checks.report = Some(report);
         self.cpp_checks.scroll = 0;

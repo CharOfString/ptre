@@ -52,6 +52,30 @@ pub(crate) fn file_uri(path: &Path) -> io::Result<String> {
     Ok(uri)
 }
 
+// Whether two URIs name the same is the same URL.
+pub(crate) fn same_uri(a: &str, b: &str) -> bool {
+    decode(a) == decode(b)
+}
+
+fn decode(uri: &str) -> Vec<u8> {
+    let bytes = uri.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let escaped = uri
+            .get(index + 1..index + 3)
+            .filter(|_| bytes[index] == b'%');
+        if let Some(byte) = escaped.and_then(|hex| u8::from_str_radix(hex, 16).ok()) {
+            decoded.push(byte);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    decoded
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,5 +88,12 @@ mod tests {
             file_uri(Path::new("/tmp/a b/ü.c")).unwrap(),
             "file:///tmp/a%20b/%C3%BC.c"
         );
+        assert!(same_uri(
+            "file:///tmp/a%20b/%c3%bc.c",
+            "file:///tmp/a b/ü.c"
+        ));
+        assert!(same_uri("file:///tmp/%7Ex.c", "file:///tmp/~x.c"));
+        assert!(!same_uri("file:///tmp/a.c", "file:///tmp/b.c"));
+        assert!(same_uri("file:///tmp/100%", "file:///tmp/100%"));
     }
 }

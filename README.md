@@ -80,6 +80,9 @@ The file name is just the language name, while the extension name is `.conf`. Av
 #### Behavior
 If the lsp ELF is NOT found, `ptre` will skip using the current LSP and only uses the context from current file to do the completion.
 
+#### Diagnostics
+Errors and warnings from the LSP are shown in the editor: a `●` next to the line number, an underline under the problem, and the message after the end of the line (red for errors, yellow for warnings). When the cursor stops on a problem, a popup below the cursor shows the full message.
+
 ## C++ Checks Service
 When the language of Editor buffer is set to C/C++, there will be a C/C++ menu on the top bar with Clang-Tidy/Cpplint check switch (they are defaulting to `OFF`).
 

@@ -47,12 +47,35 @@ pub(crate) struct Completion {
     word_start: usize,
     // Cursor when the shown candidates were computed; their ranges are relative to it.
     requested_at: usize,
+    // Latest diagnostics from the server, and whether they match the current text.
+    diagnostics: Vec<lsp::Diagnostic>,
+    diagnostics_fresh: bool,
 }
 
 impl Completion {
+    // True while the completion popup is open (possibly still waiting for candidates).
+    pub(crate) fn is_active(&self) -> bool {
+        self.active
+    }
+
     // True while a server answer is expected, so the UI loop should poll more often.
     pub(crate) fn is_waiting(&self) -> bool {
         self.active && self.waiting.is_some()
+    }
+
+    pub(crate) fn diagnostics(&self) -> &[lsp::Diagnostic] {
+        &self.diagnostics
+    }
+
+    // False while the server has not yet checked the latest edits.
+    pub(crate) fn diagnostics_fresh(&self) -> bool {
+        self.diagnostics_fresh
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_diagnostics(&mut self, diagnostics: Vec<lsp::Diagnostic>, fresh: bool) {
+        self.diagnostics = diagnostics;
+        self.diagnostics_fresh = fresh;
     }
 
     pub(crate) fn auto_enabled(&self) -> bool {
@@ -113,11 +136,16 @@ impl App {
         client.change(&self.buffer.editor.get_content());
         let answer = client.poll();
         let alive = client.is_alive();
+        if let Some(diagnostics) = client.take_diagnostics() {
+            self.completion.diagnostics = diagnostics;
+        }
+        self.completion.diagnostics_fresh = client.diagnostics_fresh();
         if let Some(answer) = answer {
             self.receive(answer);
         }
         if !alive {
             self.completion.client = None;
+            self.completion.diagnostics.clear();
             if self.completion.is_waiting() {
                 self.request_completion(None);
             }
@@ -128,6 +156,7 @@ impl App {
         let completion = &mut self.completion;
         completion.close();
         completion.attached = target.clone();
+        completion.diagnostics.clear();
         let Some((language, path)) = target else {
             completion.client = None;
             return;

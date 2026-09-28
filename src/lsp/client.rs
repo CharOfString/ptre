@@ -13,6 +13,7 @@
 // not, see <https://www.gnu.org/licenses/>.
 
 use super::{
+    diagnostics::{self, Diagnostic},
     normalize::{Completions, normalize},
     plugin::Plugin,
     position::{self, Encoding},
@@ -59,6 +60,10 @@ pub(crate) struct Client {
     next_id: i64,
     document: Option<Document>,
     pending: Option<Pending>,
+    // Diagnostics received since the last `take_diagnostics`, and the document version
+    // the latest ones describe.
+    diagnostics: Option<Vec<Diagnostic>>,
+    diagnostics_version: Option<i32>,
 }
 
 impl Client {
@@ -103,6 +108,8 @@ impl Client {
             next_id: 0,
             document: None,
             pending: None,
+            diagnostics: None,
+            diagnostics_version: None,
         };
         let name = root
             .file_name()
@@ -127,6 +134,7 @@ impl Client {
                             },
                             "contextSupport": true,
                         },
+                        "publishDiagnostics": {"versionSupport": true},
                     },
                 },
             }),
@@ -177,6 +185,9 @@ impl Client {
             version: 0,
             text: text.to_owned(),
         });
+        // Diagnostics of the previous document no longer apply.
+        self.diagnostics = Some(Vec::new());
+        self.diagnostics_version = None;
         if self.ready {
             self.send_open();
         }
@@ -245,8 +256,25 @@ impl Client {
         answer
     }
 
+    // Diagnostics that arrived since the last call, if any.
+    pub(crate) fn take_diagnostics(&mut self) -> Option<Vec<Diagnostic>> {
+        self.diagnostics.take()
+    }
+
+    // True when the latest diagnostics describe the text as it is now, not an older version.
+    pub(crate) fn diagnostics_fresh(&self) -> bool {
+        let version = self.document.as_ref().map(|document| document.version);
+        version.is_some() && version == self.diagnostics_version
+    }
+
     fn handle(&mut self, message: Value) -> Option<Completions> {
-        let id = message.get("id")?;
+        let Some(id) = message.get("id") else {
+            // Notifications need no answer; only diagnostics are used so far.
+            if message["method"] == "textDocument/publishDiagnostics" {
+                self.receive_diagnostics(&message["params"]);
+            }
+            return None;
+        };
         if let Some(method) = message.get("method").and_then(Value::as_str) {
             // A request from the server. It must be answered, or some servers stall.
             self.reply(id.clone(), method, &message["params"]);
@@ -270,6 +298,22 @@ impl Client {
             pending.word,
             self.encoding,
         ))
+    }
+
+    fn receive_diagnostics(&mut self, params: &Value) {
+        let Some(document) = &self.document else {
+            return;
+        };
+        let uri = params["uri"].as_str().unwrap_or_default();
+        if !workspace::same_uri(uri, &document.uri) {
+            return;
+        }
+        // Servers without `version` describe the text they have seen last.
+        let version = params["version"]
+            .as_i64()
+            .map_or(document.version, |v| v as i32);
+        self.diagnostics = Some(diagnostics::parse(params, &document.text, self.encoding));
+        self.diagnostics_version = Some(version);
     }
 
     fn initialized(&mut self, message: &Value) {
@@ -378,7 +422,7 @@ impl Drop for Client {
 
 #[cfg(test)]
 mod tests {
-    use super::super::plugin::parse;
+    use super::super::{diagnostics::Severity, plugin::parse};
     use super::*;
     use std::{fs, time::Instant};
 
@@ -421,7 +465,8 @@ mod tests {
         // The request must see the edited text, not the text from didOpen.
         let after = "static int value_one;\nint main(void) { valu }\n";
         client.change(after);
-        let cursor = after.find("valu").unwrap() + 4;
+        // `rfind`: the first "valu" is inside `value_one` on line 1.
+        let cursor = after.rfind("valu").unwrap() + 4;
         assert!(client.is_trigger('.') && !client.is_trigger('v'));
         assert!(client.complete(cursor - 4..cursor, None));
         let completions = wait_for(&mut client, Client::poll);
@@ -432,6 +477,20 @@ mod tests {
             .expect("value_one offered");
         assert_eq!(value.range, cursor - 4..cursor);
         assert_eq!(client.command(), ["clangd"]);
+
+        // clangd reports the undeclared name against the edited version.
+        let mut latest = Vec::new();
+        let error = wait_for(&mut client, |client| {
+            client.poll();
+            if let Some(diagnostics) = client.take_diagnostics() {
+                latest = diagnostics;
+            }
+            let fresh = client.diagnostics_fresh();
+            let error = latest.iter().find(|d| d.severity == Severity::Error);
+            error.filter(|_| fresh).cloned()
+        });
+        assert_eq!(error.range, cursor - 4..cursor);
+        assert!(error.message.contains("valu"), "{}", error.message);
         drop(client);
         fs::remove_dir_all(&dir).unwrap();
     }

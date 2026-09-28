@@ -57,8 +57,10 @@ impl App {
         self.editor_area = content_area;
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
+        self.draw_diagnostics(frame);
         super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
         self.draw_completion(frame);
+        self.draw_diagnostic_popup(frame);
         if !self.cpp_check_modal()
             && self.save_path_input.is_none()
             && !self.overwrite_confirm
