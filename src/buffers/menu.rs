@@ -31,18 +31,25 @@ const EDIT: &[(&str, &str)] = &[
     ("Copy", "M-w"),
     ("Paste", "C-y"),
 ];
-const MENUS: [&str; 3] = ["FILE", "EDIT", "LSP"];
 
-// Entries of one menu. The LSP menu shows whether completion pops up while typing.
+const MENUS: [&str; 4] = ["FILE", "EDIT", "LSP", "C/C++"];
+const CPP_MENU: usize = 3;
+
+// C/C++ menu only shows if current active buffer is in C/C++ mode.
+fn menus(cpp: bool) -> &'static [&'static str] {
+    if cpp { &MENUS } else { &MENUS[..CPP_MENU] }
+}
+
+// Entries of one menu.
 fn items(
     menu: usize,
     auto_completion: bool,
     cpp: Option<&super::cpp_checks::settings::Settings>,
 ) -> Vec<(&'static str, &'static str)> {
-    let mut entries = match menu {
-        0 => FILE.to_vec(),
-        1 => EDIT.to_vec(),
-        _ => vec![
+    match (menu, cpp) {
+        (0, _) => FILE.to_vec(),
+        (1, _) => EDIT.to_vec(),
+        (2, _) => vec![
             (
                 if auto_completion {
                     "Auto Complete: On"
@@ -53,13 +60,7 @@ fn items(
             ),
             ("Complete", "M-/"),
         ],
-    };
-
-    // The LSP menu
-    if menu == 2
-        && let Some(settings) = cpp
-    {
-        entries.extend([
+        (CPP_MENU, Some(settings)) => vec![
             (
                 if settings.tidy {
                     "Clang-tidy: On"
@@ -78,9 +79,9 @@ fn items(
             ),
             ("Run Clang-tidy", "C-c t"),
             ("Run Cpplint", "C-c l"),
-        ]);
+        ],
+        _ => Vec::new(),
     }
-    entries
 }
 
 #[derive(Default)]
@@ -90,7 +91,7 @@ pub(crate) struct Menu {
 }
 
 impl Menu {
-    pub(crate) fn draw_bar(&self, frame: &mut Frame, area: Rect) {
+    pub(crate) fn draw_bar(&self, frame: &mut Frame, area: Rect, cpp: bool) {
         let base = Style::default().fg(LIGHT_BLUE);
 
         // App name & version.
@@ -100,7 +101,7 @@ impl Menu {
         ];
 
         // App menu
-        for (index, name) in MENUS.into_iter().enumerate() {
+        for (index, name) in menus(cpp).iter().enumerate() {
             let style = base.add_modifier(Modifier::BOLD);
             let indicator = if self.active == Some(index) {
                 "❃ "
@@ -108,7 +109,7 @@ impl Menu {
                 "  "
             };
             spans.push(Span::styled(indicator, base));
-            spans.push(Span::styled(name, style));
+            spans.push(Span::styled(*name, style));
             spans.push(Span::styled("  ", base));
         }
 
@@ -144,11 +145,13 @@ impl Menu {
     ) {
         let Some(active) = self.active else { return };
         let screen = frame.area();
-        if screen.height <= 1 || screen.width == 0 {
+        let items = items(active, auto_completion, cpp);
+        
+        // The C/C++ menu has no entries once the buffer is not C/C++.
+        if screen.height <= 1 || screen.width == 0 || items.is_empty() {
             return;
         }
 
-        let items = items(active, auto_completion, cpp);
         let label_width = items
             .iter()
             .map(|(label, _)| label.len())
@@ -225,21 +228,25 @@ impl App {
             return false;
         };
 
-        let count = items(
-            active,
-            true,
-            self.is_cpp().then_some(&self.cpp_checks.settings),
-        )
-        .len();
+        let cpp = self.is_c_or_cpp();
+        let count = items(active, true, cpp.then_some(&self.cpp_checks.settings)).len();
+        
+        // Close the C/C++ menu popup after the buffer changed language.
+        if count == 0 {
+            self.menu.active = None;
+            return false;
+        }
+
+        let menu_count = menus(cpp).len();
         match key.code {
             KeyCode::Esc => self.menu.active = None,
             KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
                 let step = if key.code == KeyCode::Left {
-                    MENUS.len() - 1
+                    menu_count - 1
                 } else {
                     1
                 };
-                self.menu.active = Some((active + step) % MENUS.len());
+                self.menu.active = Some((active + step) % menu_count);
                 self.menu.selected = 0;
             }
             KeyCode::Down => self.menu.selected = (self.menu.selected + 1) % count,
@@ -259,17 +266,16 @@ impl App {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));
-                    } else if selected == 1 {
-                        self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
                     } else {
-                        use super::cpp_checks::Tool;
-                        match selected {
-                            2 => self.toggle_cpp_check(Tool::Tidy),
-                            3 => self.toggle_cpp_check(Tool::Cpplint),
-                            4 => self.run_cpp_check(Tool::Tidy),
-                            5 => self.run_cpp_check(Tool::Cpplint),
-                            _ => {}
-                        }
+                        self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
+                    }
+                } else if active == CPP_MENU {
+                    use super::cpp_checks::Tool;
+                    match selected {
+                        0 => self.toggle_cpp_check(Tool::Tidy),
+                        1 => self.toggle_cpp_check(Tool::Cpplint),
+                        2 => self.run_cpp_check(Tool::Tidy),
+                        _ => self.run_cpp_check(Tool::Cpplint),
                     }
                 } else {
                     if selected == 0 {
@@ -294,15 +300,60 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
-    fn cpp_checks_only_appear_in_cpp_menu() {
+    fn cpp_checks_have_their_own_menu() {
         let settings = super::super::cpp_checks::settings::Settings::default();
-        assert_eq!(items(2, true, None).len(), 2);
-        let cpp = items(2, true, Some(&settings));
-        assert_eq!(cpp[2], ("Clang-tidy: Off", ""));
-        assert_eq!(cpp[3], ("Cpplint: Off", ""));
-        assert_eq!(cpp[4], ("Run Clang-tidy", "C-c t"));
-        assert_eq!(cpp[5], ("Run Cpplint", "C-c l"));
+        assert_eq!(menus(false), ["FILE", "EDIT", "LSP"]);
+        assert_eq!(menus(true), ["FILE", "EDIT", "LSP", "C/C++"]);
+        assert_eq!(items(2, true, Some(&settings)).len(), 2);
+        assert_eq!(
+            items(CPP_MENU, true, Some(&settings)),
+            [
+                ("Clang-tidy: Off", ""),
+                ("Cpplint: Off", ""),
+                ("Run Clang-tidy", "C-c t"),
+                ("Run Cpplint", "C-c l"),
+            ]
+        );
+        assert!(items(CPP_MENU, true, None).is_empty());
         assert_eq!(items(0, true, Some(&settings)), FILE);
+    }
+
+    #[test]
+    fn cpp_menu_shows_only_for_c_and_cpp_buffers() {
+        let dir = std::env::temp_dir().join(format!("ptre-menu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bar = |app: &mut App| {
+            let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            let screen = terminal.backend().buffer();
+            (0..80).map(|x| screen[(x, 0)].symbol()).collect::<String>()
+        };
+        for (file, cpp) in [("main.c", true), ("main.cpp", true), ("notes.txt", false)] {
+            let path = dir.join(file);
+            std::fs::write(&path, "text").unwrap();
+            let mut app = App::default();
+            app.buffer.open(path).unwrap();
+            assert_eq!(bar(&mut app).contains("C/C++"), cpp, "{file}");
+
+            // Left from FILE wraps to the last menu shown.
+            app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+            app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+            assert_eq!(app.menu.active, Some(if cpp { CPP_MENU } else { 2 }));
+        }
+
+        // Running a disabled check from the C/C++ menu points back to that menu.
+        let mut app = App::default();
+        app.buffer.open(dir.join("main.c")).unwrap();
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(
+            app.status_bar_text,
+            "Clang-tidy is disabled; enable it in the C/C++ menu"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -28,7 +28,7 @@ impl App {
             Constraint::Length(2),
         ])
         .areas(frame.area());
-        self.menu.draw_bar(frame, menu_area);
+        self.menu.draw_bar(frame, menu_area, self.is_c_or_cpp());
 
         // Editor buffer.
         let name = self
@@ -120,7 +120,7 @@ impl App {
         self.menu.draw_popup(
             frame,
             self.completion.auto_enabled(),
-            self.is_cpp().then_some(&self.cpp_checks.settings),
+            self.is_c_or_cpp().then_some(&self.cpp_checks.settings),
         );
 
         self.draw_cpp_check(frame);

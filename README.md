@@ -56,6 +56,8 @@ $ ./build-deb -c
 * **Paste**: `Ctrl + Y`.
 * **Complete** (open/close the completion popup): `Alt + /`.
 * **Toggle auto completion**: `Ctrl + C` `Alt + L`.
+* **Trig Clang-tidy check**: `Ctrl + C` `t`.
+* **Trig Cpplint check**: `Ctrl + C` `l`.
 
 ## Plugins
 ### Code Completion Service
@@ -78,15 +80,15 @@ The file name is just the language name, while the extension name is `.conf`. Av
 #### Behavior
 If the lsp ELF is NOT found, `ptre` will skip using the current LSP and only uses the context from current file to do the completion.
 
-## C++ Checks
-In C++ mode, the LSP menu offers separate Clang-tidy and Cpplint switches. Both are off by default. Enabling Cpplint for the first time asks for its executable path (spaces and `~/` are supported).
+## C++ Checks Service
+When the language of Editor buffer is set to C/C++, there will be a C/C++ menu on the top bar with Clang-Tidy/Cpplint check switch (they are defaulting to `OFF`).
 
-* **Cpplint**: `Ctrl + C`, then plain `l`.
-* **Clang-tidy**: `Ctrl + C`, then plain `t`; `clang-tidy` must be on `PATH`.
+When you use the Cpplint for the first time, you will need to enter the PATH to Cpplint (you may install it through pip if you don't have one). You may include spaces or `~/` in your path.
 
-Save the buffer before checking. Checks run in the background without changing the file. Results include stdout, stderr and exit status; use Up/Down or PageUp/PageDown to scroll and Esc to close. Clang-tidy uses its normal project configuration; ptre does not add compiler flags or apply fixes.
+Before running code checking manually, please save the buffer first (they only runs on saved buffers). Your report will be automatically poped up after checking is done. `ptre` won't pass extra arguments or apply automatic fix.
 
-Switches and the Cpplint path are saved in `$XDG_CONFIG_HOME/ptre/cpp-checks.json` (fallback: `~/.config/ptre/cpp-checks.json`). Edit `cpplint_path` there to change the executable for the next session.
+The config including Cpplint path may be found at `$XDG_CONFIG_HOME/ptre/cpp-checks.json`. You may manually modify the `cpplint_path` and the new path will be used the next time `ptre` runs.
+
 
 ## Dependencies
 Special thanks to these libraries:

@@ -57,8 +57,9 @@ impl App {
         }
     }
 
-    pub(crate) fn is_cpp(&self) -> bool {
-        self.buffer.editor.code_ref().lang() == "cpp"
+    // C++ checks are only offerred to C/C++ buffers.
+    pub(crate) fn is_c_or_cpp(&self) -> bool {
+        matches!(self.buffer.editor.code_ref().lang(), "c" | "cpp")
     }
 
     fn save_cpp_preferences(&mut self, settings: Settings) {
@@ -77,7 +78,7 @@ impl App {
     }
 
     pub(crate) fn toggle_cpp_check(&mut self, tool: Tool) {
-        if !self.is_cpp() {
+        if !self.is_c_or_cpp() {
             return;
         }
 
@@ -98,8 +99,8 @@ impl App {
     }
 
     pub(crate) fn run_cpp_check(&mut self, tool: Tool) {
-        if !self.is_cpp() {
-            self.status_bar_text = "This check is only available in C++ mode".into();
+        if !self.is_c_or_cpp() {
+            self.status_bar_text = "Current check is for C/C++ only.".into();
             return;
         }
         let settings = &self.cpp_checks.settings;
@@ -109,7 +110,7 @@ impl App {
         };
         let name = tool.name();
         if !enabled {
-            self.status_bar_text = format!("{name} is disabled; enable it in the LSP menu");
+            self.status_bar_text = format!("{name} is disabled => enable it in the C/C++ menu");
             return;
         }
         if self.cpp_checks.pending.is_some() {

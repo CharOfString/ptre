@@ -52,6 +52,8 @@ $ ./build-deb -c
 * **粘贴**: `Ctrl + Y`.
 * **补全列表**: `Alt + /`.
 * **自动补全**: `Ctrl + C` `Alt + L`.
+* **触发Clang-tidy检查**: `Ctrl + C` `t`.
+* **触发Cpplint检查**: `Ctrl + C` `l`.
 
 ## 插件
 ### 代码补全服务
@@ -75,15 +77,14 @@ $ ./build-deb -c
 #### 行为
 如果该语言服务器的二进制可执行文件未找到，则会放弃使用语言服务器，转而改用当前文件里的单词来补全。
 
-## C++ 检查
-仅在 C++ 模式下，LSP 菜单显示独立的 Clang-tidy 和 Cpplint 开关，默认均关闭。首次启用 Cpplint 时需要输入其可执行文件路径，支持空格和 `~/`。
+## C++ 检查服务
+当编辑器缓冲区的语言被设定为C/C++时，顶栏会出现一个「C/C++」菜单，其中有独立的Clang-Tidy与Cpplint检查开关 (默认均处于关闭状态)。
 
-* **Cpplint**：先按 `Ctrl + C`，再按普通的 `l`。
-* **Clang-tidy**：先按 `Ctrl + C`，再按普通的 `t`；需要在 `PATH` 中安装 `clang-tidy`。
+首次启用Cpplint时，需要输入其可执行文件的路径 (Cpplint可以由pip安装)，路径支持空格和`~/`。
 
-检查前请先保存缓冲区。检查在后台运行，不修改文件。结果窗口显示标准输出、错误输出和退出状态，使用方向键或 PageUp/PageDown 滚动，Esc 关闭。Clang-tidy 使用其常规项目配置；ptre 不额外传入编译参数或自动应用修复。
+执行手动检查前，请先保存缓冲区 (手动检查仅检查已经保存的文件)，检查完毕后检查报告会全屏弹出。`ptre`在检查时不会传入额外的编译参数或自动应用修复。
 
-开关和 Cpplint 路径保存在 `$XDG_CONFIG_HOME/ptre/cpp-checks.json`，未设置时使用 `~/.config/ptre/cpp-checks.json`。可修改其中的 `cpplint_path`，在下次启动时使用新的路径。
+开关与Cpplint路径的位置保存在`$XDG_CONFIG_HOME/ptre/cpp-checks.json`，可以修改其中的`cpplint_path`，下次启动`ptre`时便会使用更新的Cpplint路径。
 
 ## 依赖
 特别感谢以下库：

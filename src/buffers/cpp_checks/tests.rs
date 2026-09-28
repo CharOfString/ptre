@@ -184,11 +184,10 @@ fn cpp_menu_enters_setup_and_modals_render_on_small_screens() {
     use ratatui::{Terminal, backend::TestBackend};
     let dir = Directory::new();
     let mut app = cpp_app(&dir);
+    // F10, then Left wraps to the C/C++ menu, whose second entry is the Cpplint switch.
     press(&mut app, KeyCode::F(10));
     press(&mut app, KeyCode::Left);
-    for _ in 0..3 {
-        press(&mut app, KeyCode::Down);
-    }
+    press(&mut app, KeyCode::Down);
     press(&mut app, KeyCode::Enter);
     assert!(app.cpp_checks.path_input.is_some());
     for (width, height) in [(1, 1), (10, 3), (80, 24)] {
