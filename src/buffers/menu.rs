@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
+use super::cpp_checks::{Tool, settings::Settings};
 use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
@@ -40,11 +41,47 @@ fn menus(cpp: bool) -> &'static [&'static str] {
     if cpp { &MENUS } else { &MENUS[..CPP_MENU] }
 }
 
+// What choosing a C/C++ menu entry does.
+#[derive(Clone, Copy)]
+enum CppAction {
+    Toggle(Tool),
+    Run(Tool),
+}
+
+// C/C++ menu entries. A "Run" entry only shows when its check can run.
+fn cpp_entries(settings: &Settings) -> Vec<(&'static str, &'static str, CppAction)> {
+    let tidy = if settings.tidy {
+        "Clang-tidy: On"
+    } else {
+        "Clang-tidy: Off"
+    };
+
+    let cpplint = if settings.cpplint {
+        "Cpplint: On"
+    } else {
+        "Cpplint: Off"
+    };
+
+    let mut entries = vec![
+        (tidy, "", CppAction::Toggle(Tool::Tidy)),
+        (cpplint, "", CppAction::Toggle(Tool::Cpplint)),
+    ];
+
+    if settings.tidy {
+        entries.push(("Run Clang-tidy", "C-c t", CppAction::Run(Tool::Tidy)));
+    }
+
+    if settings.cpplint_ready() {
+        entries.push(("Run Cpplint", "C-c l", CppAction::Run(Tool::Cpplint)));
+    }
+    entries
+}
+
 // Entries of one menu.
 fn items(
     menu: usize,
     auto_completion: bool,
-    cpp: Option<&super::cpp_checks::settings::Settings>,
+    cpp: Option<&Settings>,
 ) -> Vec<(&'static str, &'static str)> {
     match (menu, cpp) {
         (0, _) => FILE.to_vec(),
@@ -60,26 +97,10 @@ fn items(
             ),
             ("Complete", "M-/"),
         ],
-        (CPP_MENU, Some(settings)) => vec![
-            (
-                if settings.tidy {
-                    "Clang-tidy: On"
-                } else {
-                    "Clang-tidy: Off"
-                },
-                "",
-            ),
-            (
-                if settings.cpplint {
-                    "Cpplint: On"
-                } else {
-                    "Cpplint: Off"
-                },
-                "",
-            ),
-            ("Run Clang-tidy", "C-c t"),
-            ("Run Cpplint", "C-c l"),
-        ],
+        (CPP_MENU, Some(settings)) => cpp_entries(settings)
+            .into_iter()
+            .map(|(label, shortcut, _)| (label, shortcut))
+            .collect(),
         _ => Vec::new(),
     }
 }
@@ -141,12 +162,12 @@ impl Menu {
         &self,
         frame: &mut Frame,
         auto_completion: bool,
-        cpp: Option<&super::cpp_checks::settings::Settings>,
+        cpp: Option<&Settings>,
     ) {
         let Some(active) = self.active else { return };
         let screen = frame.area();
         let items = items(active, auto_completion, cpp);
-        
+
         // The C/C++ menu has no entries once the buffer is not C/C++.
         if screen.height <= 1 || screen.width == 0 || items.is_empty() {
             return;
@@ -230,7 +251,7 @@ impl App {
 
         let cpp = self.is_c_or_cpp();
         let count = items(active, true, cpp.then_some(&self.cpp_checks.settings)).len();
-        
+
         // Close the C/C++ menu popup after the buffer changed language.
         if count == 0 {
             self.menu.active = None;
@@ -270,12 +291,10 @@ impl App {
                         self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
                     }
                 } else if active == CPP_MENU {
-                    use super::cpp_checks::Tool;
-                    match selected {
-                        0 => self.toggle_cpp_check(Tool::Tidy),
-                        1 => self.toggle_cpp_check(Tool::Cpplint),
-                        2 => self.run_cpp_check(Tool::Tidy),
-                        _ => self.run_cpp_check(Tool::Cpplint),
+                    // selected indexes the same entries the popup showed.
+                    match cpp_entries(&self.cpp_checks.settings)[selected].2 {
+                        CppAction::Toggle(tool) => self.toggle_cpp_check(tool),
+                        CppAction::Run(tool) => self.run_cpp_check(tool),
                     }
                 } else {
                     if selected == 0 {
@@ -300,19 +319,35 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     #[test]
-    fn cpp_checks_have_their_own_menu() {
-        let settings = super::super::cpp_checks::settings::Settings::default();
+    fn cpp_menu_hides_checks_that_cannot_run() {
+        let mut settings = Settings::default();
         assert_eq!(menus(false), ["FILE", "EDIT", "LSP"]);
         assert_eq!(menus(true), ["FILE", "EDIT", "LSP", "C/C++"]);
         assert_eq!(items(2, true, Some(&settings)).len(), 2);
+        let labels = |settings: &Settings| {
+            let entries = items(CPP_MENU, true, Some(settings));
+            entries
+                .into_iter()
+                .map(|(label, _)| label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(labels(&settings), ["Clang-tidy: Off", "Cpplint: Off"]);
+        settings.tidy = true;
         assert_eq!(
-            items(CPP_MENU, true, Some(&settings)),
-            [
-                ("Clang-tidy: Off", ""),
-                ("Cpplint: Off", ""),
-                ("Run Clang-tidy", "C-c t"),
-                ("Run Cpplint", "C-c l"),
-            ]
+            labels(&settings),
+            ["Clang-tidy: On", "Cpplint: Off", "Run Clang-tidy"]
+        );
+
+        // Cpplint also needs an executable file as its path.
+        settings.cpplint = true;
+        for path in ["", "/ptre-missing/cpplint", "/", "Cargo.toml"] {
+            settings.cpplint_path = path.into();
+            assert_eq!(labels(&settings).len(), 3, "{path:?}");
+        }
+        settings.cpplint_path = std::env::current_exe().unwrap().display().to_string();
+        assert_eq!(
+            items(CPP_MENU, true, Some(&settings))[3],
+            ("Run Cpplint", "C-c l")
         );
         assert!(items(CPP_MENU, true, None).is_empty());
         assert_eq!(items(0, true, Some(&settings)), FILE);
@@ -341,18 +376,18 @@ mod tests {
             assert_eq!(app.menu.active, Some(if cpp { CPP_MENU } else { 2 }));
         }
 
-        // Running a disabled check from the C/C++ menu points back to that menu.
+        // With "Run Clang-tidy" hidden, the third entry runs Cpplint.
         let mut app = App::default();
         app.buffer.open(dir.join("main.c")).unwrap();
+        let settings = &mut app.cpp_checks.settings;
+        settings.cpplint = true;
+        settings.cpplint_path = std::env::current_exe().unwrap().display().to_string();
         app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(
-            app.status_bar_text,
-            "Clang-tidy is disabled; enable it in the C/C++ menu"
-        );
+        assert_eq!(app.status_bar_text, "Running Cpplint…");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

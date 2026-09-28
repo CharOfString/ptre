@@ -30,6 +30,11 @@ pub(super) fn settings_path() -> Option<PathBuf> {
 }
 
 impl Settings {
+    // Cpplint can run only when it is on and its path is valid.
+    pub(crate) fn cpplint_ready(&self) -> bool {
+        self.cpplint && executable(std::path::Path::new(&self.cpplint_path))
+    }
+
     pub(super) fn load(path: &std::path::Path) -> io::Result<Self> {
         let text = match fs::read_to_string(path) {
             Ok(text) => text,
@@ -58,5 +63,27 @@ impl Settings {
         let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
         fs::write(&temporary, serde_json::to_vec_pretty(&value)?)?;
         fs::rename(temporary, path)
+    }
+}
+
+// True for executable.
+pub(super) fn executable(path: &std::path::Path) -> bool {
+    let Ok(metadata) = path.metadata() else {
+        return false;
+    };
+
+    if !metadata.is_file() {
+        return false;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+
+    #[cfg(not(unix))]
+    {
+        true
     }
 }

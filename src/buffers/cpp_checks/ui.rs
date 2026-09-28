@@ -39,7 +39,7 @@ impl App {
                         Some(PathBuf::from(input.as_str()))
                     };
                     let path = path.and_then(|path| path.canonicalize().ok());
-                    if let Some(path) = path.filter(|path| executable(path)) {
+                    if let Some(path) = path.filter(|path| settings::executable(path)) {
                         let mut settings = self.cpp_checks.settings.clone();
                         settings.cpplint_path = path.to_string_lossy().into_owned();
                         settings.cpplint = true;
@@ -104,23 +104,5 @@ impl App {
                 area,
             );
         }
-    }
-}
-
-fn executable(path: &std::path::Path) -> bool {
-    let Ok(metadata) = path.metadata() else {
-        return false;
-    };
-    if !metadata.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
-    }
-    #[cfg(not(unix))]
-    {
-        true
     }
 }

@@ -113,6 +113,13 @@ impl App {
             self.status_bar_text = format!("{name} is disabled => enable it in the C/C++ menu");
             return;
         }
+        // Hides "Run Cpplint" in this case in non-cpp mode.
+        if matches!(tool, Tool::Cpplint) && !settings.cpplint_ready() {
+            self.status_bar_text =
+                "Cpplint path is not an executable file => fix cpplint_path in cpp-checks.json"
+                    .into();
+            return;
+        }
         if self.cpp_checks.pending.is_some() {
             self.status_bar_text = "A C++ check is already running".into();
             return;

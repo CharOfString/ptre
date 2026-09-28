@@ -89,7 +89,7 @@ fn cpp_only_toggles_and_shortcuts_do_not_edit() {
     app.toggle_cpp_check(Tool::Tidy);
     assert!(!app.cpp_checks.settings.tidy);
     app.run_cpp_check(Tool::Tidy);
-    assert!(app.status_bar_text.contains("only available"));
+    assert!(app.status_bar_text.contains("C/C++ only"));
 }
 
 #[test]
@@ -196,5 +196,22 @@ fn cpp_menu_enters_setup_and_modals_render_on_small_screens() {
         app.cpp_checks.report = Some("test warning\nsecond line".into());
         terminal.draw(|frame| app.draw(frame)).unwrap();
         app.cpp_checks.report = None;
+    }
+}
+
+#[test]
+fn cpplint_shortcut_needs_an_executable_path() {
+    let dir = Directory::new();
+    let mut app = cpp_app(&dir);
+    app.cpp_checks.settings.cpplint = true;
+    for path in ["", "/ptre-missing/cpplint", "/"] {
+        app.cpp_checks.settings.cpplint_path = path.into();
+        app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        press(&mut app, KeyCode::Char('l'));
+        assert!(
+            app.status_bar_text.contains("not an executable"),
+            "{path:?}"
+        );
+        assert!(app.cpp_checks.pending.is_none(), "{path:?}");
     }
 }
