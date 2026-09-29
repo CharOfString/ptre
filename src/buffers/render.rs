@@ -61,6 +61,7 @@ impl App {
         super::editor_status::draw(
             &self.buffer.editor,
             self.diagnostic_counts(),
+            self.nerd_font,
             frame,
             buffer_status_area,
             editor_area,
@@ -130,6 +131,7 @@ impl App {
         self.menu.draw_popup(
             frame,
             self.completion.auto_enabled(),
+            self.nerd_font,
             self.is_c_or_cpp().then_some(&self.cpp_checks.settings),
         );
 

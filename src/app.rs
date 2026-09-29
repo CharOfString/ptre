@@ -39,6 +39,8 @@ pub(crate) struct App {
     pub(crate) cpp_checks: crate::buffers::cpp_checks::Checks,
     pub(crate) completion: crate::buffers::completion::Completion,
     pub(crate) quick_fix: crate::buffers::fixes::QuickFix,
+    // Draw icons from a Nerd Font (WINDOW menu).
+    pub(crate) nerd_font: bool,
 }
 
 // Implementation of the app struct
