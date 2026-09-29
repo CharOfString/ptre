@@ -21,3 +21,4 @@ mod editor_status;
 pub(crate) mod fixes;
 pub(crate) mod menu;
 mod render;
+pub(crate) mod search;

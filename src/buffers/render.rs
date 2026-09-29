@@ -72,6 +72,7 @@ impl App {
         self.draw_diagnostic_popup(frame);
         if !self.cpp_check_modal()
             && self.save_path_input.is_none()
+            && !self.search.reads_input()
             && !self.overwrite_confirm
             && self.menu.active.is_none()
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
@@ -85,6 +86,8 @@ impl App {
                 " Cpplint path: {input}█ ※ Enter: enable Esc: cancel ※ {}",
                 self.status_bar_text
             )
+        } else if let Some(prompt) = self.search.prompt() {
+            format!(" {prompt}")
         } else if let Some(path_input) = &self.save_path_input {
             format!(
                 " Save as: {path_input}█  ※  Enter: save  Esc: cancel  ※  {}",

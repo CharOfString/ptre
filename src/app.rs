@@ -39,6 +39,7 @@ pub(crate) struct App {
     pub(crate) cpp_checks: crate::buffers::cpp_checks::Checks,
     pub(crate) completion: crate::buffers::completion::Completion,
     pub(crate) quick_fix: crate::buffers::fixes::QuickFix,
+    pub(crate) search: crate::buffers::search::Search,
     // Draw icons from a Nerd Font (WINDOW menu).
     pub(crate) nerd_font: bool,
 }
@@ -161,7 +162,11 @@ impl App {
             return;
         }
 
-        if !self.ctrl_x_wait_flag && self.menu.active.is_none() && self.handle_completion_key(key) {
+        // Search and replace see keys before completion.
+        if !self.ctrl_x_wait_flag
+            && self.menu.active.is_none()
+            && (self.handle_search_key(key) || self.handle_completion_key(key))
+        {
             return;
         }
 

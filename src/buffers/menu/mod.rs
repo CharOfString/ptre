@@ -33,9 +33,17 @@ const EDIT: &[(&str, &str)] = &[
     ("Paste", "C-y"),
 ];
 
-const MENUS: [&str; 5] = ["FILE", "EDIT", "LSP", "WINDOW", "C/C++"];
-const WINDOW_MENU: usize = 3;
-const CPP_MENU: usize = 4;
+const BUFFER: &[(&str, &str)] = &[
+    ("Search Forward", "C-s"),
+    ("Search Backward", "C-r"),
+    ("Query Replace", "M-%"),
+];
+
+const MENUS: [&str; 6] = ["FILE", "EDIT", "BUFFER", "LSP", "WINDOW", "C/C++"];
+const BUFFER_MENU: usize = 2;
+const LSP_MENU: usize = 3;
+const WINDOW_MENU: usize = 4;
+const CPP_MENU: usize = 5;
 
 // C/C++ menu only shows if current active buffer is in C/C++ mode.
 fn menus(cpp: bool) -> &'static [&'static str] {
@@ -88,7 +96,8 @@ fn items(
     match (menu, cpp) {
         (0, _) => FILE.to_vec(),
         (1, _) => EDIT.to_vec(),
-        (2, _) => vec![
+        (BUFFER_MENU, _) => BUFFER.to_vec(),
+        (LSP_MENU, _) => vec![
             (
                 if auto_completion {
                     "Auto Complete: On"
@@ -301,7 +310,10 @@ impl App {
                         KeyCode::Char(if selected == 0 { 's' } else { 'c' }),
                         ctrl,
                     ));
-                } else if active == 2 {
+                } else if active == BUFFER_MENU {
+                    let (code, modifiers) = [('s', ctrl), ('r', ctrl), ('%', alt)][selected];
+                    self.handle_key(KeyEvent::new(KeyCode::Char(code), modifiers));
+                } else if active == LSP_MENU {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));

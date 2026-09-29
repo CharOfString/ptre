@@ -18,9 +18,12 @@ use ratatui::{Terminal, backend::TestBackend};
 #[test]
 fn cpp_menu_hides_checks_that_cannot_run() {
     let mut settings = Settings::default();
-    assert_eq!(menus(false), ["FILE", "EDIT", "LSP", "WINDOW"]);
-    assert_eq!(menus(true), ["FILE", "EDIT", "LSP", "WINDOW", "C/C++"]);
-    assert_eq!(items(2, true, false, Some(&settings)).len(), 3);
+    assert_eq!(menus(false), ["FILE", "EDIT", "BUFFER", "LSP", "WINDOW"]);
+    assert_eq!(
+        menus(true),
+        ["FILE", "EDIT", "BUFFER", "LSP", "WINDOW", "C/C++"]
+    );
+    assert_eq!(items(LSP_MENU, true, false, Some(&settings)).len(), 3);
     let labels = |settings: &Settings| {
         let entries = items(CPP_MENU, true, false, Some(settings));
         entries
@@ -133,7 +136,7 @@ fn active_menu_and_popup_use_markers_without_underlines() {
         let label: String = (0..80).map(|x| screen[(x, 0)].symbol()).collect();
         assert!(label.contains(&format!("❃ {}", MENUS[active])));
         assert_eq!(screen[(popup_x, 1)].symbol(), "╭");
-        let popup_width = [18, 17, 31][active];
+        let popup_width = [18, 17, 25][active];
         assert_eq!(screen[(popup_x + popup_width - 1, 1)].symbol(), "╮");
         assert_eq!(screen[(popup_x + 1, 2)].symbol(), "·");
         assert_eq!(screen[(popup_x + 1, 3)].symbol(), " ");
@@ -190,11 +193,13 @@ fn lsp_menu_toggles_auto_completion_and_opens_popup() {
     let mut app = App::default();
     app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
-    assert_eq!(app.menu.active, Some(2));
+    assert_eq!(app.menu.active, Some(BUFFER_MENU));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert_eq!(app.menu.active, Some(LSP_MENU));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     assert_eq!(app.menu.active, Some(WINDOW_MENU));
     app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
-    assert_eq!(app.menu.active, Some(2));
+    assert_eq!(app.menu.active, Some(LSP_MENU));
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     let row = |app: &mut App, terminal: &mut Terminal<TestBackend>| {
         terminal.draw(|frame| app.draw(frame)).unwrap();
@@ -207,8 +212,9 @@ fn lsp_menu_toggles_auto_completion_and_opens_popup() {
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(!app.completion.auto_enabled());
     assert!(app.menu.active.is_none());
-    // FILE, EDIT, LSP from the left.
+    // FILE, EDIT, BUFFER, LSP from the left.
     app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     assert!(row(&mut app, &mut terminal).contains("Auto Complete: Off  C-c M-l"));
@@ -218,6 +224,7 @@ fn lsp_menu_toggles_auto_completion_and_opens_popup() {
         app.handle_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
     }
     app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
@@ -264,4 +271,23 @@ fn window_menu_toggles_nerd_font_icons() {
     assert!(screen(&mut app, &mut terminal)[2].contains("NF Mode: On"));
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert!(!app.nerd_font);
+}
+
+#[test]
+fn buffer_menu_starts_search_and_replace() {
+    let mut app = App::default();
+    app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    assert_eq!(app.menu.active, Some(BUFFER_MENU));
+    assert_eq!(
+        items(BUFFER_MENU, true, false, None),
+        [
+            ("Search Forward", "C-s"),
+            ("Search Backward", "C-r"),
+            ("Query Replace", "M-%"),
+        ]
+    );
+    app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(app.search.prompt().as_deref(), Some("Query replace: █"));
 }

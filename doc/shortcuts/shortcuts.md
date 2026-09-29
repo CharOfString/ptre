@@ -10,3 +10,5 @@
 * **Complete** (open/close the completion popup): `Alt + /`.
 * **Toggle auto completion**: `Ctrl + C` `Alt + L`.
 * **Apply autofix**: `Ctrl + C` `A`.
+* **Search forward / backward**: `Ctrl + S` / `Ctrl + R`. Type to search; press them again for the next match, `Enter` to stop, `Ctrl + G` to go back.
+* **Query replace**: `Alt + %`. Then answer at each match: `Y`/`Space` replace, `N` skip, `!` replace all, `.` replace and stop, `Q` stop.
