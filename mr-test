@@ -56,7 +56,7 @@ printf 'Local PR checks (current toolchain)\nLogs: %s\n\n' "$LOG_DIR"
 # Keep these commands aligned with .github/workflows/pr-checks.yml.
 run_check 'Linting' lint cargo clippy --all-targets --all-features --locked -- -D warnings
 run_check 'Code style' format ./format-code --check
-run_check 'License headers' license env COPYRIGHT_EMAIL=root@charofstring.cc ./update-license --check
+run_check 'License headers' license env COPYRIGHT_EMAIL=root@charofstring.cc ./update-header --check
 run_check 'Compilation' compile cargo check --all-targets --all-features --locked
 
 printf '\n=== M.R. check report ===\n'

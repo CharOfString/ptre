@@ -39,7 +39,7 @@ jobs:
       - name: Check license headers
         env:
           COPYRIGHT_EMAIL: root@charofstring.cc
-        run: ./update-license --check
+        run: ./update-header --check
 
       - name: Check compilation
         run: cargo check --all-targets --all-features --locked
