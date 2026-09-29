@@ -9,3 +9,4 @@
 * **Paste**: `Ctrl + Y`.
 * **Complete** (open/close the completion popup): `Alt + /`.
 * **Toggle auto completion**: `Ctrl + C` `Alt + L`.
+* **Apply autofix**: `Ctrl + C` `A`.
