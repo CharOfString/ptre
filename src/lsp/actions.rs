@@ -12,7 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-/// Quick fixes from textDocument/codeAction.
+//! Quick fixes from textDocument/codeAction.
 
 use super::{
     position::{Encoding, to_offset, to_position},

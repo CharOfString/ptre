@@ -12,7 +12,8 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-/// Errors and warnings the server reports with textDocument/publishDiagnostics.
+//! Errors and warnings the server reports with textDocument/publishDiagnostics.
+
 use super::position::{Encoding, to_offset};
 use lsp_types::DiagnosticSeverity;
 use serde_json::Value;
