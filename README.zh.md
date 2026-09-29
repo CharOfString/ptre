@@ -124,10 +124,10 @@ _对于更多示例，请访问[文档目录](./doc/)。_
 <!-- ROADMAP -->
 ## 里程碑
 
-- [ ] C/C++编辑器
+- [X] C/C++编辑器
   - [X] C/C++代码自动补全
-  - [ ] C/C++ Clang-tidy/Cpplint报错显示
-  - [ ] C/C++报错自动修复
+  - [X] C/C++ Clang-tidy/Cpplint报错显示
+  - [X] C/C++报错自动修复
 - [ ] Rust编辑器
   - [ ] 提供代码自动补全
   - [ ] 提供linting支持
