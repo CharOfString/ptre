@@ -12,6 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
+use super::cpp_checks::{Tool, settings::Settings};
 use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
@@ -31,14 +32,61 @@ const EDIT: &[(&str, &str)] = &[
     ("Copy", "M-w"),
     ("Paste", "C-y"),
 ];
-const MENUS: [&str; 3] = ["FILE", "EDIT", "LSP"];
 
-// Entries of one menu. The LSP menu shows whether completion pops up while typing.
-fn items(menu: usize, auto_completion: bool) -> Vec<(&'static str, &'static str)> {
-    match menu {
-        0 => FILE.to_vec(),
-        1 => EDIT.to_vec(),
-        _ => vec![
+const MENUS: [&str; 4] = ["FILE", "EDIT", "LSP", "C/C++"];
+const CPP_MENU: usize = 3;
+
+// C/C++ menu only shows if current active buffer is in C/C++ mode.
+fn menus(cpp: bool) -> &'static [&'static str] {
+    if cpp { &MENUS } else { &MENUS[..CPP_MENU] }
+}
+
+// What choosing a C/C++ menu entry does.
+#[derive(Clone, Copy)]
+enum CppAction {
+    Toggle(Tool),
+    Run(Tool),
+}
+
+// C/C++ menu entries. A "Run" entry only shows when its check can run.
+fn cpp_entries(settings: &Settings) -> Vec<(&'static str, &'static str, CppAction)> {
+    let tidy = if settings.tidy {
+        "Clang-tidy: On"
+    } else {
+        "Clang-tidy: Off"
+    };
+
+    let cpplint = if settings.cpplint {
+        "Cpplint: On"
+    } else {
+        "Cpplint: Off"
+    };
+
+    let mut entries = vec![
+        (tidy, "", CppAction::Toggle(Tool::Tidy)),
+        (cpplint, "", CppAction::Toggle(Tool::Cpplint)),
+    ];
+
+    if settings.tidy {
+        entries.push(("Run Clang-tidy", "C-c t", CppAction::Run(Tool::Tidy)));
+    }
+
+    if settings.cpplint_ready() {
+        entries.push(("Run Cpplint", "C-c l", CppAction::Run(Tool::Cpplint)));
+    }
+    entries
+}
+
+// Entries of one menu.
+fn items(
+    menu: usize,
+    auto_completion: bool,
+    cpp: Option<&Settings>,
+) -> Vec<(&'static str, &'static str)> {
+    match (menu, cpp) {
+        (0, _) => FILE.to_vec(),
+        (1, _) => EDIT.to_vec(),
+        (2, _) => vec![
             (
                 if auto_completion {
                     "Auto Complete: On"
@@ -48,7 +96,13 @@ fn items(menu: usize, auto_completion: bool) -> Vec<(&'static str, &'static str)
                 "C-c M-l",
             ),
             ("Complete", "M-/"),
+            ("Quick Fix", "C-c a"),
         ],
+        (CPP_MENU, Some(settings)) => cpp_entries(settings)
+            .into_iter()
+            .map(|(label, shortcut, _)| (label, shortcut))
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -59,7 +113,7 @@ pub(crate) struct Menu {
 }
 
 impl Menu {
-    pub(crate) fn draw_bar(&self, frame: &mut Frame, area: Rect) {
+    pub(crate) fn draw_bar(&self, frame: &mut Frame, area: Rect, cpp: bool) {
         let base = Style::default().fg(LIGHT_BLUE);
 
         // App name & version.
@@ -69,7 +123,7 @@ impl Menu {
         ];
 
         // App menu
-        for (index, name) in MENUS.into_iter().enumerate() {
+        for (index, name) in menus(cpp).iter().enumerate() {
             let style = base.add_modifier(Modifier::BOLD);
             let indicator = if self.active == Some(index) {
                 "❃ "
@@ -77,7 +131,7 @@ impl Menu {
                 "  "
             };
             spans.push(Span::styled(indicator, base));
-            spans.push(Span::styled(name, style));
+            spans.push(Span::styled(*name, style));
             spans.push(Span::styled("  ", base));
         }
 
@@ -105,14 +159,21 @@ impl Menu {
     }
 
     // Popup menu.
-    pub(crate) fn draw_popup(&self, frame: &mut Frame, auto_completion: bool) {
+    pub(crate) fn draw_popup(
+        &self,
+        frame: &mut Frame,
+        auto_completion: bool,
+        cpp: Option<&Settings>,
+    ) {
         let Some(active) = self.active else { return };
         let screen = frame.area();
-        if screen.height <= 1 || screen.width == 0 {
+        let items = items(active, auto_completion, cpp);
+
+        // The C/C++ menu has no entries once the buffer is not C/C++.
+        if screen.height <= 1 || screen.width == 0 || items.is_empty() {
             return;
         }
 
-        let items = items(active, auto_completion);
         let label_width = items
             .iter()
             .map(|(label, _)| label.len())
@@ -189,16 +250,25 @@ impl App {
             return false;
         };
 
-        let count = items(active, true).len();
+        let cpp = self.is_c_or_cpp();
+        let count = items(active, true, cpp.then_some(&self.cpp_checks.settings)).len();
+
+        // Close the C/C++ menu popup after the buffer changed language.
+        if count == 0 {
+            self.menu.active = None;
+            return false;
+        }
+
+        let menu_count = menus(cpp).len();
         match key.code {
             KeyCode::Esc => self.menu.active = None,
             KeyCode::Left | KeyCode::Right | KeyCode::Tab => {
                 let step = if key.code == KeyCode::Left {
-                    MENUS.len() - 1
+                    menu_count - 1
                 } else {
                     1
                 };
-                self.menu.active = Some((active + step) % MENUS.len());
+                self.menu.active = Some((active + step) % menu_count);
                 self.menu.selected = 0;
             }
             KeyCode::Down => self.menu.selected = (self.menu.selected + 1) % count,
@@ -218,8 +288,17 @@ impl App {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));
-                    } else {
+                    } else if selected == 1 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
+                    } else {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
+                        self.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+                    }
+                } else if active == CPP_MENU {
+                    // selected indexes the same entries the popup showed.
+                    match cpp_entries(&self.cpp_checks.settings)[selected].2 {
+                        CppAction::Toggle(tool) => self.toggle_cpp_check(tool),
+                        CppAction::Run(tool) => self.run_cpp_check(tool),
                     }
                 } else {
                     if selected == 0 {
@@ -242,6 +321,79 @@ impl App {
 mod tests {
     use super::*;
     use ratatui::{Terminal, backend::TestBackend};
+
+    #[test]
+    fn cpp_menu_hides_checks_that_cannot_run() {
+        let mut settings = Settings::default();
+        assert_eq!(menus(false), ["FILE", "EDIT", "LSP"]);
+        assert_eq!(menus(true), ["FILE", "EDIT", "LSP", "C/C++"]);
+        assert_eq!(items(2, true, Some(&settings)).len(), 3);
+        let labels = |settings: &Settings| {
+            let entries = items(CPP_MENU, true, Some(settings));
+            entries
+                .into_iter()
+                .map(|(label, _)| label)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(labels(&settings), ["Clang-tidy: Off", "Cpplint: Off"]);
+        settings.tidy = true;
+        assert_eq!(
+            labels(&settings),
+            ["Clang-tidy: On", "Cpplint: Off", "Run Clang-tidy"]
+        );
+
+        // Cpplint also needs an executable file as its path.
+        settings.cpplint = true;
+        for path in ["", "/ptre-missing/cpplint", "/", "Cargo.toml"] {
+            settings.cpplint_path = path.into();
+            assert_eq!(labels(&settings).len(), 3, "{path:?}");
+        }
+        settings.cpplint_path = std::env::current_exe().unwrap().display().to_string();
+        assert_eq!(
+            items(CPP_MENU, true, Some(&settings))[3],
+            ("Run Cpplint", "C-c l")
+        );
+        assert!(items(CPP_MENU, true, None).is_empty());
+        assert_eq!(items(0, true, Some(&settings)), FILE);
+    }
+
+    #[test]
+    fn cpp_menu_shows_only_for_c_and_cpp_buffers() {
+        let dir = std::env::temp_dir().join(format!("ptre-menu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bar = |app: &mut App| {
+            let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            let screen = terminal.backend().buffer();
+            (0..80).map(|x| screen[(x, 0)].symbol()).collect::<String>()
+        };
+        for (file, cpp) in [("main.c", true), ("main.cpp", true), ("notes.txt", false)] {
+            let path = dir.join(file);
+            std::fs::write(&path, "text").unwrap();
+            let mut app = App::default();
+            app.buffer.open(path).unwrap();
+            assert_eq!(bar(&mut app).contains("C/C++"), cpp, "{file}");
+
+            // Left from FILE wraps to the last menu shown.
+            app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+            app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+            assert_eq!(app.menu.active, Some(if cpp { CPP_MENU } else { 2 }));
+        }
+
+        // With "Run Clang-tidy" hidden, the third entry runs Cpplint.
+        let mut app = App::default();
+        app.buffer.open(dir.join("main.c")).unwrap();
+        let settings = &mut app.cpp_checks.settings;
+        settings.cpplint = true;
+        settings.cpplint_path = std::env::current_exe().unwrap().display().to_string();
+        app.handle_key(KeyEvent::new(KeyCode::F(10), KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(app.status_bar_text, "Running Cpplint…");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn renders_light_blue_menu_and_separator() {

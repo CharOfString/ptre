@@ -23,6 +23,7 @@ use std::{ffi::OsString, io, path::PathBuf};
 // Main app of Pointer.
 fn main() -> io::Result<()> {
     let mut app = App::default();
+    app.load_cpp_preferences();
 
     // Language server plugins; a broken plugin file is reported but does not stop ptre.
     let (plugins, errors) = lsp::load_plugins();

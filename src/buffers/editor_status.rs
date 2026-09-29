@@ -12,11 +12,13 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use crate::buffers::menu::LIGHT_BLUE;
+use super::{diagnostics::color, menu::LIGHT_BLUE};
+use crate::lsp::Severity;
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style},
+    text::{Line, Span},
     widgets::Paragraph,
 };
 use ratatui_code_editor::editor::Editor;
@@ -54,8 +56,25 @@ fn labels(editor: &Editor) -> (String, String) {
     )
 }
 
+// The error/warning indicator.
+fn problem_spans((errors, warnings): (usize, usize)) -> [Span<'static>; 4] {
+    let separator = Span::styled(" · ", Style::default().fg(LIGHT_BLUE));
+    [
+        Span::styled(format!("E: {errors}"), color(Severity::Error)),
+        separator.clone(),
+        Span::styled(format!("W: {warnings}"), color(Severity::Warning)),
+        separator,
+    ]
+}
+
 // Draw the actual bar.
-pub(super) fn draw(editor: &Editor, frame: &mut Frame, area: Rect, border_area: Rect) {
+pub(super) fn draw(
+    editor: &Editor,
+    problems: (usize, usize),
+    frame: &mut Frame,
+    area: Rect,
+    border_area: Rect,
+) {
     if area.height < 2 || area.width == 0 {
         return;
     }
@@ -73,13 +92,16 @@ pub(super) fn draw(editor: &Editor, frame: &mut Frame, area: Rect, border_area: 
 
     let area = Rect::new(area.x, area.y + 1, area.width, 1);
     let (left, right) = labels(editor);
-    let right_width = u16::try_from(right.chars().count()).unwrap_or(u16::MAX);
+    let mut right_line = Line::from(problem_spans(problems).to_vec());
+    right_line.push_span(right);
+
+    let right_width = u16::try_from(right_line.width()).unwrap_or(u16::MAX);
     let [left_area, right_area] =
         Layout::horizontal([Constraint::Min(0), Constraint::Length(right_width)]).areas(area);
     let style = Style::default().fg(LIGHT_BLUE);
     frame.render_widget(Paragraph::new(left).style(style), left_area);
     frame.render_widget(
-        Paragraph::new(right)
+        Paragraph::new(right_line)
             .alignment(Alignment::Right)
             .style(style),
         right_area,
@@ -114,6 +136,16 @@ mod tests {
     }
 
     #[test]
+    fn problems_show_errors_in_red_and_warnings_in_yellow() {
+        let spans = problem_spans((2, 11));
+        let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, "E: 2 · W: 11 · ");
+        assert_eq!(spans[0].style.fg, Some(Color::LightRed));
+        assert_eq!(spans[1].style.fg, Some(LIGHT_BLUE));
+        assert_eq!(spans[2].style.fg, Some(Color::Yellow));
+    }
+
+    #[test]
     fn footer_is_inside_buffer_and_keeps_global_borders() {
         let mut app = App::default();
         let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
@@ -126,7 +158,7 @@ mod tests {
         assert!(footer.starts_with("│ L1 Top · 0 chars"));
         let global: String = (0..80).map(|x| screen[(x, 23)].symbol()).collect();
         assert!(!global.contains("chars"));
-        assert!(footer.ends_with("LF · Text │"));
+        assert!(footer.ends_with("E: 0 · W: 0 · LF · Text │"));
         assert_eq!(app.editor_area.bottom(), 19);
         assert_eq!(screen[(0, 21)].symbol(), "╰");
         assert_eq!(screen[(0, 22)].symbol(), "─");

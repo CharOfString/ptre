@@ -1,0 +1,216 @@
+// Copyright (C) 2026 CharOfString <root@charofstring.cc>
+//
+//
+// This software is free software: you can redistribute it and/or modify it under the terms of the
+// GNU General Public License as published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This software is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+// without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with this software. If
+// not, see <https://www.gnu.org/licenses/>.
+
+mod cpplint;
+pub(super) mod settings;
+#[cfg(test)]
+mod tests;
+mod ui;
+
+use crate::{app::App, lsp::Diagnostic};
+use settings::{Settings, settings_path};
+use std::{io, path::PathBuf, process::Command, sync::mpsc};
+
+#[derive(Clone, Copy)]
+pub(crate) enum Tool {
+    Tidy,
+    Cpplint,
+}
+
+impl Tool {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Tidy => "Clang-tidy",
+            Self::Cpplint => "Cpplint",
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct Checks {
+    pub(crate) settings: Settings,
+    config_path: Option<PathBuf>,
+    pub(crate) path_input: Option<String>,
+    pending: Option<mpsc::Receiver<String>>,
+    // The running check: its tool, the file and the text it checks.
+    checking: Option<(Tool, PathBuf, String)>,
+    report: Option<String>,
+    scroll: u16,
+    // Findings of the last Cpplint run, and the text they were found in.
+    cpplint_diagnostics: Vec<Diagnostic>,
+    cpplint_text: String,
+}
+
+impl App {
+    pub(crate) fn load_cpp_preferences(&mut self) {
+        self.cpp_checks.config_path = settings_path();
+        if let Some(path) = &self.cpp_checks.config_path {
+            match Settings::load(path) {
+                Ok(settings) => self.cpp_checks.settings = settings,
+                Err(error) => self.status_bar_text = format!("C++ preferences: {error}"),
+            }
+        }
+    }
+
+    // Cpplint findings, while Cpplint is on and the buffer still holds the text it checked.
+    // After an edit their lines may be wrong, so they stay hidden until the next run.
+    pub(crate) fn cpplint_diagnostics(&self) -> &[Diagnostic] {
+        let checks = &self.cpp_checks;
+        let current = checks.settings.cpplint
+            && !checks.cpplint_diagnostics.is_empty()
+            && self.is_c_or_cpp()
+            && checks.cpplint_text == self.buffer.editor.get_content();
+        if current {
+            &checks.cpplint_diagnostics
+        } else {
+            &[]
+        }
+    }
+
+    // C++ checks are only offerred to C/C++ buffers.
+    pub(crate) fn is_c_or_cpp(&self) -> bool {
+        matches!(self.buffer.editor.code_ref().lang(), "c" | "cpp")
+    }
+
+    fn save_cpp_preferences(&mut self, settings: Settings) {
+        let result = self.cpp_checks.config_path.as_ref().map_or_else(
+            || Err(io::Error::other("No configuration directory available")),
+            |path| settings.save(path),
+        );
+        match result {
+            Ok(()) => {
+                self.cpp_checks.settings = settings;
+                self.cpp_checks.path_input = None;
+                self.status_bar_text = "C++ preferences saved".into();
+            }
+            Err(error) => self.status_bar_text = format!("Cannot save C++ preferences: {error}"),
+        }
+    }
+
+    pub(crate) fn toggle_cpp_check(&mut self, tool: Tool) {
+        if !self.is_c_or_cpp() {
+            return;
+        }
+
+        let mut settings = self.cpp_checks.settings.clone();
+        match tool {
+            Tool::Tidy => settings.tidy = !settings.tidy,
+            Tool::Cpplint => {
+                if !settings.cpplint && settings.cpplint_path.is_empty() {
+                    self.completion.close();
+                    self.cpp_checks.path_input = Some(String::new());
+                    self.status_bar_text = "Enter the cpplint executable path".into();
+                    return;
+                }
+                settings.cpplint = !settings.cpplint;
+            }
+        }
+        self.save_cpp_preferences(settings);
+    }
+
+    pub(crate) fn run_cpp_check(&mut self, tool: Tool) {
+        if !self.is_c_or_cpp() {
+            self.status_bar_text = "Current check is for C/C++ only.".into();
+            return;
+        }
+        let settings = &self.cpp_checks.settings;
+        let enabled = match tool {
+            Tool::Tidy => settings.tidy,
+            Tool::Cpplint => settings.cpplint,
+        };
+        let name = tool.name();
+        if !enabled {
+            self.status_bar_text = format!("{name} is disabled => enable it in the C/C++ menu");
+            return;
+        }
+        // Hides "Run Cpplint" in this case in non-cpp mode.
+        if matches!(tool, Tool::Cpplint) && !settings.cpplint_ready() {
+            self.status_bar_text =
+                "Cpplint path is not an executable file => fix cpplint_path in cpp-checks.json"
+                    .into();
+            return;
+        }
+        if self.cpp_checks.pending.is_some() {
+            self.status_bar_text = "A C++ check is already running".into();
+            return;
+        }
+        self.buffer.check_disk();
+        if self.buffer.path.is_none() || self.buffer.is_dirty() || self.buffer.obsolete {
+            self.status_bar_text = "Save the current buffer before checking".into();
+            return;
+        }
+        let path = match self.buffer.path.as_ref().unwrap().canonicalize() {
+            Ok(path) => path,
+            Err(error) => {
+                self.status_bar_text = format!("Cannot check file: {error}");
+                return;
+            }
+        };
+
+        let program = match tool {
+            Tool::Tidy => "clang-tidy".to_owned(),
+            Tool::Cpplint => settings.cpplint_path.clone(),
+        };
+        let (sender, receiver) = mpsc::channel();
+        let text = self.buffer.editor.get_content();
+        self.cpp_checks.checking = Some((tool, path.clone(), text));
+
+        // Run without a shell so spaces and shell characters in paths stay literal.
+        std::thread::spawn(move || {
+            let result = Command::new(program).arg(&path).output();
+            let report = match result {
+                Ok(output) => format!(
+                    "{name}: {}\n{}\n\n{}{}",
+                    output.status,
+                    path.display(),
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                ),
+                Err(error) => format!("{name} failed: {error}\n{}", path.display()),
+            };
+            let _ = sender.send(report);
+        });
+        self.cpp_checks.pending = Some(receiver);
+        self.status_bar_text = format!("Running {name}…");
+    }
+
+    pub(crate) fn poll_cpp_check(&mut self) {
+        // Do not interrupt a save or setup prompt with the result window.
+        if self.save_path_input.is_some()
+            || self.overwrite_confirm
+            || self.cpp_checks.path_input.is_some()
+            || self.menu.active.is_some()
+        {
+            return;
+        }
+        let Some(receiver) = &self.cpp_checks.pending else {
+            return;
+        };
+        let report = match receiver.try_recv() {
+            Ok(report) => report,
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => "C++ check worker stopped".into(),
+        };
+        self.cpp_checks.pending = None;
+        // Cpplint findings are also shown in the editor.
+        if let Some((Tool::Cpplint, path, text)) = self.cpp_checks.checking.take() {
+            self.cpp_checks.cpplint_diagnostics = cpplint::parse(&report, &path, &text);
+            self.cpp_checks.cpplint_text = text;
+        }
+        self.completion.close();
+        self.cpp_checks.report = Some(report);
+        self.cpp_checks.scroll = 0;
+        self.status_bar_text = "C++ check finished".into();
+    }
+}

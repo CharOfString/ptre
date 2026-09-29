@@ -1180,6 +1180,7 @@ dependencies = [
  "ratatui",
  "ratatui-code-editor",
  "serde_json",
+ "unicode-width",
 ]
 
 [[package]]

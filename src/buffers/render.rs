@@ -28,7 +28,7 @@ impl App {
             Constraint::Length(2),
         ])
         .areas(frame.area());
-        self.menu.draw_bar(frame, menu_area);
+        self.menu.draw_bar(frame, menu_area, self.is_c_or_cpp());
 
         // Editor buffer.
         let name = self
@@ -57,9 +57,20 @@ impl App {
         self.editor_area = content_area;
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
-        super::editor_status::draw(&self.buffer.editor, frame, buffer_status_area, editor_area);
+        self.draw_diagnostics(frame);
+        super::editor_status::draw(
+            &self.buffer.editor,
+            self.diagnostic_counts(),
+            frame,
+            buffer_status_area,
+            editor_area,
+        );
+
         self.draw_completion(frame);
-        if self.save_path_input.is_none()
+        self.draw_fix_chooser(frame);
+        self.draw_diagnostic_popup(frame);
+        if !self.cpp_check_modal()
+            && self.save_path_input.is_none()
             && !self.overwrite_confirm
             && self.menu.active.is_none()
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
@@ -68,9 +79,14 @@ impl App {
         }
 
         // status_bar_text bar.
-        let status_bar_text_text = if let Some(path_input) = &self.save_path_input {
+        let status_bar_text_text = if let Some(input) = &self.cpp_checks.path_input {
             format!(
-                " Save as: {path_input}█  |  Enter: save  Esc: cancel  |  {}",
+                " Cpplint path: {input}█ ※ Enter: enable Esc: cancel ※ {}",
+                self.status_bar_text
+            )
+        } else if let Some(path_input) = &self.save_path_input {
+            format!(
+                " Save as: {path_input}█  ※  Enter: save  Esc: cancel  ※  {}",
                 self.status_bar_text
             )
         } else {
@@ -111,7 +127,13 @@ impl App {
         // Init render
         frame.render_widget(status_bar_text, status_bar_text_area);
 
-        self.menu.draw_popup(frame, self.completion.auto_enabled());
+        self.menu.draw_popup(
+            frame,
+            self.completion.auto_enabled(),
+            self.is_c_or_cpp().then_some(&self.cpp_checks.settings),
+        );
+
+        self.draw_cpp_check(frame);
 
         if self.overwrite_confirm {
             super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());

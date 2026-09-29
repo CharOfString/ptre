@@ -22,17 +22,29 @@ const AUTO_MIN_CHARS: usize = 2;
 impl App {
     // Returns true when the key was consumed by completion.
     pub(crate) fn handle_completion_key(&mut self, key: KeyEvent) -> bool {
+        // An open quick fix chooser takes the keys first.
+        if self.handle_fix_key(key) {
+            return true;
+        }
         let control = key.modifiers == KeyModifiers::CONTROL;
         let alt = key.modifiers == KeyModifiers::ALT;
         let plain = !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
 
-        // C-c starts a mode-specific chord; the LSP commands are the only ones so far.
+        // C-c starts a mode-specific command.
         if self.ctrl_c_wait_flag {
             self.ctrl_c_wait_flag = false;
             if key.code == KeyCode::Char('l') && alt {
                 self.toggle_auto_completion();
+            } else if key.modifiers.is_empty() {
+                use crate::buffers::cpp_checks::Tool;
+                match key.code {
+                    KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
+                    KeyCode::Char('t') => self.run_cpp_check(Tool::Tidy),
+                    KeyCode::Char('a') => self.request_fix(),
+                    _ => {}
+                }
             }
             return true;
         }

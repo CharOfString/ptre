@@ -16,13 +16,17 @@
 // ask for completions. Which server runs for which language comes from plugin files (see
 // `plugin`); server differences are absorbed in `normalize`.
 
+mod actions;
 mod client;
+mod diagnostics;
 mod normalize;
 mod plugin;
 mod position;
 mod transport;
 mod workspace;
 
+pub(crate) use actions::{Fix, Fixes};
 pub(crate) use client::Client;
+pub(crate) use diagnostics::{Diagnostic, Severity};
 pub(crate) use normalize::{Candidate, Completions};
 pub(crate) use plugin::{Plugin, language_id, load as load_plugins};

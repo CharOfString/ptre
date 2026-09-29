@@ -129,10 +129,10 @@ _For more examples, please refer to the [documentation directory](./doc/)._
 <!-- ROADMAP -->
 ## Roadmap
 
-- [ ] C/C++ editor buffer
+- [X] C/C++ editor buffer
   - [X] C/C++ code auto completion.
-  - [ ] C/C++ Clang-tidy/Cpplint error displaying.
-  - [ ] C/C++ error autofix.
+  - [X] C/C++ Clang-tidy/Cpplint error displaying.
+  - [X] C/C++ error autofix.
 - [ ] Rust editor buffer
   - [ ] Provide code auto completion.
   - [ ] Provide linting.
