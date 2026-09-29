@@ -13,6 +13,7 @@
 // not, see <https://www.gnu.org/licenses/>.
 
 use super::{
+    actions::{self, Fixes},
     diagnostics::{self, Diagnostic},
     normalize::{Completions, normalize},
     plugin::Plugin,
@@ -64,6 +65,11 @@ pub(crate) struct Client {
     // the latest ones describe.
     diagnostics: Option<Vec<Diagnostic>>,
     diagnostics_version: Option<i32>,
+    // The latest diagnostics as the server sent them, for quick fix requests.
+    raw_diagnostics: Vec<Value>,
+    // An unanswered quick fix request (its id and the text it was made on), and its answer.
+    pending_fixes: Option<(i64, String)>,
+    fixes: Option<Fixes>,
 }
 
 impl Client {
@@ -110,6 +116,9 @@ impl Client {
             pending: None,
             diagnostics: None,
             diagnostics_version: None,
+            raw_diagnostics: Vec::new(),
+            pending_fixes: None,
+            fixes: None,
         };
         let name = root
             .file_name()
@@ -135,6 +144,13 @@ impl Client {
                             "contextSupport": true,
                         },
                         "publishDiagnostics": {"versionSupport": true},
+                        // Without literal support, servers answer with commands only.
+                        "codeAction": {
+                            "codeActionLiteralSupport": {
+                                "codeActionKind": {"valueSet": ["quickfix"]},
+                            },
+                            "isPreferredSupport": true,
+                        },
                     },
                 },
             }),
@@ -188,6 +204,7 @@ impl Client {
         // Diagnostics of the previous document no longer apply.
         self.diagnostics = Some(Vec::new());
         self.diagnostics_version = None;
+        self.raw_diagnostics.clear();
         if self.ready {
             self.send_open();
         }
@@ -267,6 +284,38 @@ impl Client {
         version.is_some() && version == self.diagnostics_version
     }
 
+    // Ask for quick fixes of the diagnostics at `cursor`. False when there is nothing to ask:
+    // no fresh diagnostics there, or the server is not ready.
+    pub(crate) fn request_fixes(&mut self, cursor: usize) -> bool {
+        if !self.is_ready() || !self.diagnostics_fresh() {
+            return false;
+        }
+        let Some(document) = &self.document else {
+            return false;
+        };
+        let at_cursor =
+            actions::diagnostics_at(&self.raw_diagnostics, &document.text, cursor, self.encoding);
+        if at_cursor.is_empty() {
+            return false;
+        }
+        let params = actions::request(
+            &document.uri,
+            &document.text,
+            cursor,
+            at_cursor,
+            self.encoding,
+        );
+        let text = document.text.clone();
+        let id = self.request("textDocument/codeAction", params);
+        self.pending_fixes = Some((id, text));
+        true
+    }
+
+    // The answer to the latest quick fix request, once it arrived.
+    pub(crate) fn take_fixes(&mut self) -> Option<Fixes> {
+        self.fixes.take()
+    }
+
     fn handle(&mut self, message: Value) -> Option<Completions> {
         let Some(id) = message.get("id") else {
             // Notifications need no answer; only diagnostics are used so far.
@@ -283,6 +332,15 @@ impl Client {
         // Nothing else is sent before the handshake, so this answers `initialize`.
         if !self.ready {
             self.initialized(&message);
+            return None;
+        }
+        if let Some((_, text)) = self
+            .pending_fixes
+            .take_if(|(fixes_id, _)| id.as_i64() == Some(*fixes_id))
+        {
+            let uri = self.document.as_ref().map_or("", |document| &document.uri);
+            let fixes = actions::parse(&message["result"], uri, &text, self.encoding);
+            self.fixes = Some(Fixes { fixes, text });
             return None;
         }
         let pending = self
@@ -314,6 +372,10 @@ impl Client {
             .map_or(document.version, |v| v as i32);
         self.diagnostics = Some(diagnostics::parse(params, &document.text, self.encoding));
         self.diagnostics_version = Some(version);
+        self.raw_diagnostics = params["diagnostics"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
     }
 
     fn initialized(&mut self, message: &Value) {
@@ -421,77 +483,4 @@ impl Drop for Client {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::super::{diagnostics::Severity, plugin::parse};
-    use super::*;
-    use std::{fs, time::Instant};
-
-    fn wait_for<T>(client: &mut Client, mut done: impl FnMut(&mut Client) -> Option<T>) -> T {
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            if let Some(value) = done(client) {
-                return value;
-            }
-            assert!(client.is_alive(), "server exited");
-            assert!(Instant::now() < deadline, "server timed out");
-            thread::sleep(Duration::from_millis(20));
-        }
-    }
-
-    #[test]
-    fn missing_server_fails_to_start() {
-        let plugin = parse("c", "command = ptre-no-such-server").unwrap();
-        assert!(Client::start(&plugin, Path::new("main.c")).is_err());
-    }
-
-    #[test]
-    fn clangd_completes_after_changes() {
-        let plugin = parse("c", include_str!("../../plugins/lsp/c.conf")).unwrap();
-        let dir = std::env::temp_dir().join(format!("ptre-lsp-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("main.c");
-        let before = "static int value_one;\nint main(void) { }\n";
-        fs::write(&file, before).unwrap();
-        let Ok(mut client) = Client::start(&plugin, &file) else {
-            eprintln!("clangd not installed; skipping");
-            return fs::remove_dir_all(&dir).unwrap();
-        };
-        client.open(&file, "c", before).unwrap();
-        wait_for(&mut client, |client| {
-            client.poll();
-            client.is_ready().then_some(())
-        });
-
-        // The request must see the edited text, not the text from didOpen.
-        let after = "static int value_one;\nint main(void) { valu }\n";
-        client.change(after);
-        // `rfind`: the first "valu" is inside `value_one` on line 1.
-        let cursor = after.rfind("valu").unwrap() + 4;
-        assert!(client.is_trigger('.') && !client.is_trigger('v'));
-        assert!(client.complete(cursor - 4..cursor, None));
-        let completions = wait_for(&mut client, Client::poll);
-        let value = completions
-            .candidates
-            .iter()
-            .find(|candidate| candidate.text == "value_one")
-            .expect("value_one offered");
-        assert_eq!(value.range, cursor - 4..cursor);
-        assert_eq!(client.command(), ["clangd"]);
-
-        // clangd reports the undeclared name against the edited version.
-        let mut latest = Vec::new();
-        let error = wait_for(&mut client, |client| {
-            client.poll();
-            if let Some(diagnostics) = client.take_diagnostics() {
-                latest = diagnostics;
-            }
-            let fresh = client.diagnostics_fresh();
-            let error = latest.iter().find(|d| d.severity == Severity::Error);
-            error.filter(|_| fresh).cloned()
-        });
-        assert_eq!(error.range, cursor - 4..cursor);
-        assert!(error.message.contains("valu"), "{}", error.message);
-        drop(client);
-        fs::remove_dir_all(&dir).unwrap();
-    }
-}
+mod tests;

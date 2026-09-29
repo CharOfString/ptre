@@ -78,6 +78,15 @@ impl Completion {
         self.diagnostics_fresh = fresh;
     }
 
+    // Ask the language server for quick fixes at `cursor`, after syncing `text`.
+    pub(crate) fn request_fixes(&mut self, text: &str, cursor: usize) -> bool {
+        let Some(client) = &mut self.client else {
+            return false;
+        };
+        client.change(text);
+        client.request_fixes(cursor)
+    }
+
     pub(crate) fn auto_enabled(&self) -> bool {
         !self.auto_off
     }
@@ -135,6 +144,7 @@ impl App {
         };
         client.change(&self.buffer.editor.get_content());
         let answer = client.poll();
+        let fixes = client.take_fixes();
         let alive = client.is_alive();
         if let Some(diagnostics) = client.take_diagnostics() {
             self.completion.diagnostics = diagnostics;
@@ -143,9 +153,13 @@ impl App {
         if let Some(answer) = answer {
             self.receive(answer);
         }
+        if let Some(fixes) = fixes {
+            self.receive_fixes(fixes);
+        }
         if !alive {
             self.completion.client = None;
             self.completion.diagnostics.clear();
+            self.quick_fix.stop_waiting();
             if self.completion.is_waiting() {
                 self.request_completion(None);
             }

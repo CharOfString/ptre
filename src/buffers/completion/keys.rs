@@ -22,6 +22,10 @@ const AUTO_MIN_CHARS: usize = 2;
 impl App {
     // Returns true when the key was consumed by completion.
     pub(crate) fn handle_completion_key(&mut self, key: KeyEvent) -> bool {
+        // An open quick fix chooser takes the keys first.
+        if self.handle_fix_key(key) {
+            return true;
+        }
         let control = key.modifiers == KeyModifiers::CONTROL;
         let alt = key.modifiers == KeyModifiers::ALT;
         let plain = !key
@@ -38,6 +42,7 @@ impl App {
                 match key.code {
                     KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
                     KeyCode::Char('t') => self.run_cpp_check(Tool::Tidy),
+                    KeyCode::Char('a') => self.request_fix(),
                     _ => {}
                 }
             }

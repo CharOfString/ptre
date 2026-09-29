@@ -38,6 +38,7 @@ pub(crate) struct App {
     pub(crate) buffer_command: String,
     pub(crate) cpp_checks: crate::buffers::cpp_checks::Checks,
     pub(crate) completion: crate::buffers::completion::Completion,
+    pub(crate) quick_fix: crate::buffers::fixes::QuickFix,
 }
 
 // Implementation of the app struct
@@ -66,7 +67,7 @@ impl App {
             // Wait for event; ignore key release to avoid handling a keystroke twice.
             // Wake up sooner while a completion answer is expected.
             let mut timeout = interval.saturating_sub(last_disk_check.elapsed());
-            if self.completion.is_waiting() {
+            if self.completion.is_waiting() || self.quick_fix.is_waiting() {
                 timeout = timeout.min(Duration::from_millis(20));
             }
             if event::poll(timeout)?

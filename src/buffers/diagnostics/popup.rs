@@ -41,6 +41,7 @@ impl App {
     pub(crate) fn draw_diagnostic_popup(&self, frame: &mut Frame) {
         // Completion, menus and prompts need the space and the user's attention first.
         if self.completion.is_active()
+            || self.quick_fix.is_open()
             || self.menu.active.is_some()
             || self.cpp_check_modal()
             || self.save_path_input.is_some()
@@ -64,6 +65,15 @@ impl App {
             lines.extend(message_lines(diagnostic, width));
         }
         lines.truncate(MAX_ROWS);
+        // Problems from the language server may have quick fixes.
+        let cursor = self.buffer.editor.get_cursor();
+        let fixable = self.completion.diagnostics_fresh()
+            && (self.completion.diagnostics().iter())
+                .any(|d| d.range.start <= cursor && cursor <= d.range.end);
+        if fixable {
+            let hint = Style::default().fg(LIGHT_BLUE).add_modifier(Modifier::DIM);
+            lines.push(Line::styled("C-c a: quick fix", hint));
+        }
 
         let text_width = lines.iter().map(Line::width).max().unwrap_or(0) as u16;
         let width = (text_width + 4).min(area.width);

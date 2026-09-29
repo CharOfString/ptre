@@ -96,6 +96,7 @@ fn items(
                 "C-c M-l",
             ),
             ("Complete", "M-/"),
+            ("Quick Fix", "C-c a"),
         ],
         (CPP_MENU, Some(settings)) => cpp_entries(settings)
             .into_iter()
@@ -287,8 +288,11 @@ impl App {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
                         self.handle_key(KeyEvent::new(KeyCode::Char('l'), alt));
-                    } else {
+                    } else if selected == 1 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('/'), alt));
+                    } else {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));
+                        self.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
                     }
                 } else if active == CPP_MENU {
                     // selected indexes the same entries the popup showed.
@@ -323,7 +327,7 @@ mod tests {
         let mut settings = Settings::default();
         assert_eq!(menus(false), ["FILE", "EDIT", "LSP"]);
         assert_eq!(menus(true), ["FILE", "EDIT", "LSP", "C/C++"]);
-        assert_eq!(items(2, true, Some(&settings)).len(), 2);
+        assert_eq!(items(2, true, Some(&settings)).len(), 3);
         let labels = |settings: &Settings| {
             let entries = items(CPP_MENU, true, Some(settings));
             entries

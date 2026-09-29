@@ -65,8 +65,9 @@ impl App {
             buffer_status_area,
             editor_area,
         );
-    
+
         self.draw_completion(frame);
+        self.draw_fix_chooser(frame);
         self.draw_diagnostic_popup(frame);
         if !self.cpp_check_modal()
             && self.save_path_input.is_none()
