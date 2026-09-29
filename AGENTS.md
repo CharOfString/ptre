@@ -7,3 +7,4 @@
 - Comments must be written in English; please use simple English so that non-native English speakers can understand them. If you need to update the documentation, do so in the respective language of each document.
 - The goal of the code is to be human-readable and maintainable; use this as the foundation to complete your task.
 - Please refer to `CODE_OF_CONDUCT.md` and `CONTRIBUTING.md`; all requirements applicable to human contributors and AI policies apply to you as well.
+- Your comment should NOT contain Markdown elements.
