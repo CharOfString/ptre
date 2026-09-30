@@ -137,7 +137,7 @@ _For more examples, please refer to the [documentation directory](./doc/)._
   - [ ] Provide code auto completion.
   - [ ] Provide linting.
 - [ ] Application
-  - [ ] Provide color icon mode. 
+  - [X] Provide color icon mode. 
   - [ ] Provide i18n translations.
 - [ ] Packaging
   - [X] Debian.
@@ -204,7 +204,7 @@ For all dependencies, please refer to [Cargo.lock](./Cargo.lock).
 [issues-shield]: https://img.shields.io/github/issues/CharOfString/ptre.svg?style=flat
 [issues-url]: https://github.com/CharOfString/ptre/issues
 [license-shield]: https://img.shields.io/github/license/CharOfString/ptre.svg?style=flat
-[license-url]: https://github.com/CharOfString/ptre/blob/master/LICENSE.txt
+[license-url]: https://github.com/CharOfString/ptre/blob/main/LICENSE
 [product-screenshot]: images/screenshot.png
 <!-- Shields.io badges. You can a comprehensive list with many more badges at: https://github.com/inttter/md-badges -->
 [Next.js]: https://img.shields.io/badge/next.js-000000?style=flat&logo=nextdotjs&logoColor=white
