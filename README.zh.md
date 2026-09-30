@@ -132,7 +132,7 @@ _对于更多示例，请访问[文档目录](./doc/)。_
   - [ ] 提供代码自动补全
   - [ ] 提供linting支持
 - [ ] 程序
-  - [ ] 提供图标模式
+  - [X] 提供图标模式
   - [ ] 提供国际化翻译
 - [ ] 打包
   - [X] Debian
@@ -198,7 +198,7 @@ _对于更多示例，请访问[文档目录](./doc/)。_
 [issues-shield]: https://img.shields.io/github/issues/CharOfString/ptre.svg?style=flat
 [issues-url]: https://github.com/CharOfString/ptre/issues
 [license-shield]: https://img.shields.io/github/license/CharOfString/ptre.svg?style=flat
-[license-url]: https://github.com/CharOfString/ptre/blob/master/LICENSE.txt
+[license-url]: https://github.com/CharOfString/ptre/blob/main/LICENSE
 [product-screenshot]: images/screenshot.png
 <!-- Shields.io badges. You can a comprehensive list with many more badges at: https://github.com/inttter/md-badges -->
 [Next.js]: https://img.shields.io/badge/next.js-000000?style=flat&logo=nextdotjs&logoColor=white
