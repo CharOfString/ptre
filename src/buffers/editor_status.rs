@@ -12,7 +12,10 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use super::{diagnostics::color, menu::LIGHT_BLUE};
+use super::{
+    diagnostics::{color, nerd_icon},
+    menu::LIGHT_BLUE,
+};
 use crate::lsp::Severity;
 use ratatui::{
     Frame,
@@ -57,12 +60,21 @@ fn labels(editor: &Editor) -> (String, String) {
 }
 
 // The error/warning indicator.
-fn problem_spans((errors, warnings): (usize, usize)) -> [Span<'static>; 4] {
+// In Nerd Font mode the letters are replaced with the severity icons.
+fn problem_spans((errors, warnings): (usize, usize), nerd_font: bool) -> [Span<'static>; 4] {
+    let label = |severity, letter, count| {
+        let span = if nerd_font {
+            format!("{} {count}", nerd_icon(severity))
+        } else {
+            format!("{letter}: {count}")
+        };
+        Span::styled(span, color(severity))
+    };
     let separator = Span::styled(" · ", Style::default().fg(LIGHT_BLUE));
     [
-        Span::styled(format!("E: {errors}"), color(Severity::Error)),
+        label(Severity::Error, 'E', errors),
         separator.clone(),
-        Span::styled(format!("W: {warnings}"), color(Severity::Warning)),
+        label(Severity::Warning, 'W', warnings),
         separator,
     ]
 }
@@ -71,6 +83,7 @@ fn problem_spans((errors, warnings): (usize, usize)) -> [Span<'static>; 4] {
 pub(super) fn draw(
     editor: &Editor,
     problems: (usize, usize),
+    nerd_font: bool,
     frame: &mut Frame,
     area: Rect,
     border_area: Rect,
@@ -92,7 +105,7 @@ pub(super) fn draw(
 
     let area = Rect::new(area.x, area.y + 1, area.width, 1);
     let (left, right) = labels(editor);
-    let mut right_line = Line::from(problem_spans(problems).to_vec());
+    let mut right_line = Line::from(problem_spans(problems, nerd_font).to_vec());
     right_line.push_span(right);
 
     let right_width = u16::try_from(right_line.width()).unwrap_or(u16::MAX);
@@ -137,11 +150,18 @@ mod tests {
 
     #[test]
     fn problems_show_errors_in_red_and_warnings_in_yellow() {
-        let spans = problem_spans((2, 11));
+        let spans = problem_spans((2, 11), false);
         let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
         assert_eq!(text, "E: 2 · W: 11 · ");
         assert_eq!(spans[0].style.fg, Some(Color::LightRed));
         assert_eq!(spans[1].style.fg, Some(LIGHT_BLUE));
+        assert_eq!(spans[2].style.fg, Some(Color::Yellow));
+
+        // Nerd Font mode puts the icons in place of the letters, in the same colors.
+        let spans = problem_spans((2, 11), true);
+        let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, "\u{f057} 2 · \u{f071} 11 · ");
+        assert_eq!(spans[0].style.fg, Some(Color::LightRed));
         assert_eq!(spans[2].style.fg, Some(Color::Yellow));
     }
 

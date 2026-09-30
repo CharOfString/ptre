@@ -44,6 +44,15 @@ impl App {
 }
 
 // Coloring config for the status bar.
+pub(super) fn nerd_icon(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "\u{f057}",
+        Severity::Warning => "\u{f071}",
+        Severity::Information => "\u{f05a}",
+        Severity::Hint => "\u{f0eb}",
+    }
+}
+
 pub(super) fn color(severity: Severity) -> Color {
     match severity {
         Severity::Error => Color::LightRed,

@@ -12,7 +12,7 @@
 // You should have received a copy of the GNU General Public License along with this software. If
 // not, see <https://www.gnu.org/licenses/>.
 
-use super::color;
+use super::{color, nerd_icon};
 use crate::{app::App, lsp::Diagnostic};
 use ratatui::{
     Frame,
@@ -57,7 +57,12 @@ impl App {
             let Some(worst) = on_line.iter().map(|d| d.severity).min() else {
                 continue;
             };
-            buf[(area.left(), y)].set_symbol("●").set_fg(color(worst));
+            let mark = if self.nerd_font {
+                nerd_icon(worst)
+            } else {
+                "●"
+            };
+            buf[(area.left(), y)].set_symbol(mark).set_fg(color(worst));
 
             // Underline marked chars, up to the first cell after the text of the line.
             let mut end_x = None;
@@ -148,5 +153,11 @@ mod tests {
         assert!(row(y + 2).contains("z  unused 'z'"));
         assert_eq!(screen[(area.left(), y + 3)].symbol(), " ");
         assert!(!row(y + 3).contains("unused"));
+
+        app.nerd_font = true;
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let screen = terminal.backend().buffer();
+        assert_eq!(screen[(area.left(), y)].symbol(), "\u{f057}");
+        assert_eq!(screen[(area.left(), y + 2)].symbol(), "\u{f071}");
     }
 }
