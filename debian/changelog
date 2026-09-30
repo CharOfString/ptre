@@ -1,3 +1,13 @@
+ptre (0.1.4-1) unstable; urgency=medium
+
+  * Added icon mode for non-tty use.
+  * Added search & replace.
+  * Added goto line.
+  * Added Clang-tidy check with inline aiagnostics..
+  * Added error count to buffer status bar.
+
+ -- CharOfString <root@charofstring.cc>  Wed, 30 Sep 2026 10:26:12 -0500
+
 ptre (0.1.3-1) unstable; urgency=medium
 
   * Enhanced Clang-Tidy support.
