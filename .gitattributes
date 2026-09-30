@@ -1,0 +1,2 @@
+# Exclude playground code from language statistics
+playground/** linguist-vendored
