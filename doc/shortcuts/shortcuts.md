@@ -12,3 +12,4 @@
 * **Apply autofix**: `Ctrl + C` `A`.
 * **Search forward / backward**: `Ctrl + S` / `Ctrl + R`. (`Enter` to stop, `Ctrl + G` to go back.)
 * **Query replace**: `Alt + %`. Then answer at each match: `Y`/`Space` replace, `N` skip, `!` replace all, `.` replace and stop, `Q` stop.
+* **Go to line**: `Alt + G` `G` (or `Alt + G` `Alt + G`).

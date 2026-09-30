@@ -62,8 +62,8 @@ impl Search {
 impl App {
     // Keys of search and replace.
     pub(crate) fn handle_search_key(&mut self, key: KeyEvent) -> bool {
-        // C-c chords belong to completion and the checks.
-        if self.ctrl_c_wait_flag {
+        // C-c chords belong to completion and the checks; go to line keeps its own keys.
+        if self.ctrl_c_wait_flag || self.goto_line.is_busy() {
             return false;
         }
         match self.search.mode {

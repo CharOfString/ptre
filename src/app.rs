@@ -40,6 +40,7 @@ pub(crate) struct App {
     pub(crate) completion: crate::buffers::completion::Completion,
     pub(crate) quick_fix: crate::buffers::fixes::QuickFix,
     pub(crate) search: crate::buffers::search::Search,
+    pub(crate) goto_line: crate::buffers::goto_line::GotoLine,
     // Draw icons from a Nerd Font (WINDOW menu).
     pub(crate) nerd_font: bool,
 }
@@ -90,6 +91,7 @@ impl App {
         let prefix = match (self.ctrl_x_wait_flag, self.ctrl_c_wait_flag) {
             (true, _) => "C-x ",
             (_, true) => "C-c ",
+            _ if self.goto_line.after_prefix() => "M-g ",
             _ => "",
         };
         self.buffer_command = crate::utils::keys::shortcut_label(key, !prefix.is_empty())
@@ -165,7 +167,9 @@ impl App {
         // Search and replace see keys before completion.
         if !self.ctrl_x_wait_flag
             && self.menu.active.is_none()
-            && (self.handle_search_key(key) || self.handle_completion_key(key))
+            && (self.handle_search_key(key)
+                || self.handle_goto_line_key(key)
+                || self.handle_completion_key(key))
         {
             return;
         }

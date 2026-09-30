@@ -19,6 +19,7 @@ mod dialog;
 pub(crate) mod editor;
 mod editor_status;
 pub(crate) mod fixes;
+pub(crate) mod goto_line;
 pub(crate) mod menu;
 mod render;
 pub(crate) mod search;

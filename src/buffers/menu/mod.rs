@@ -37,6 +37,7 @@ const BUFFER: &[(&str, &str)] = &[
     ("Search Forward", "C-s"),
     ("Search Backward", "C-r"),
     ("Query Replace", "M-%"),
+    ("Go to Line", "M-g g"),
 ];
 
 const MENUS: [&str; 6] = ["FILE", "EDIT", "BUFFER", "LSP", "WINDOW", "C/C++"];
@@ -311,8 +312,13 @@ impl App {
                         ctrl,
                     ));
                 } else if active == BUFFER_MENU {
-                    let (code, modifiers) = [('s', ctrl), ('r', ctrl), ('%', alt)][selected];
-                    self.handle_key(KeyEvent::new(KeyCode::Char(code), modifiers));
+                    if selected == 3 {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('g'), alt));
+                        self.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE));
+                    } else {
+                        let (code, modifiers) = [('s', ctrl), ('r', ctrl), ('%', alt)][selected];
+                        self.handle_key(KeyEvent::new(KeyCode::Char(code), modifiers));
+                    }
                 } else if active == LSP_MENU {
                     if selected == 0 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('c'), ctrl));

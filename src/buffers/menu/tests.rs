@@ -136,7 +136,7 @@ fn active_menu_and_popup_use_markers_without_underlines() {
         let label: String = (0..80).map(|x| screen[(x, 0)].symbol()).collect();
         assert!(label.contains(&format!("❃ {}", MENUS[active])));
         assert_eq!(screen[(popup_x, 1)].symbol(), "╭");
-        let popup_width = [18, 17, 25][active];
+        let popup_width = [18, 17, 27][active];
         assert_eq!(screen[(popup_x + popup_width - 1, 1)].symbol(), "╮");
         assert_eq!(screen[(popup_x + 1, 2)].symbol(), "·");
         assert_eq!(screen[(popup_x + 1, 3)].symbol(), " ");
@@ -285,9 +285,18 @@ fn buffer_menu_starts_search_and_replace() {
             ("Search Forward", "C-s"),
             ("Search Backward", "C-r"),
             ("Query Replace", "M-%"),
+            ("Go to Line", "M-g g"),
         ]
     );
     app.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.goto_line.is_open());
+    app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::ALT));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     assert_eq!(app.search.prompt().as_deref(), Some("Query replace: █"));
 }
