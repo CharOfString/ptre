@@ -23,3 +23,4 @@ pub(crate) mod goto_line;
 pub(crate) mod menu;
 mod render;
 pub(crate) mod search;
+pub(crate) mod terminal;

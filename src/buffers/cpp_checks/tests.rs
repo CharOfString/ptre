@@ -82,6 +82,9 @@ fn cpp_only_toggles_and_shortcuts_do_not_edit() {
     for key in ['t', 'l'] {
         app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
         press(&mut app, KeyCode::Char(key));
+        if key == 't' {
+            press(&mut app, KeyCode::Char('c'));
+        }
         assert!(app.status_bar_text.contains("disabled"));
     }
     assert_eq!(app.buffer.editor.get_content(), before);

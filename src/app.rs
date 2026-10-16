@@ -26,11 +26,14 @@ use std::{
 #[derive(Default)]
 pub(crate) struct App {
     pub(crate) buffer: Buffer,
+    pub(crate) terminal: crate::buffers::terminal::Terminal,
     pub(crate) menu: crate::buffers::menu::Menu,
     pub(crate) editor_area: Rect,
     exit_flag: bool,
-    ctrl_x_wait_flag: bool,
+    pub(crate) ctrl_x_wait_flag: bool,
     pub(crate) ctrl_c_wait_flag: bool,
+    // Set after C-c t, which starts terminal and tool commands.
+    pub(crate) ctrl_c_t_wait_flag: bool,
     kill_ring: Option<String>,
     pub(crate) overwrite_confirm: bool,
     pub(crate) save_path_input: Option<String>,
@@ -62,7 +65,8 @@ impl App {
 
             // Talk to the language server, then draw a new frame.
             self.sync_lsp();
-            if !self.ctrl_x_wait_flag && !self.ctrl_c_wait_flag {
+            self.terminal.poll();
+            if !self.ctrl_x_wait_flag && !self.ctrl_c_wait_flag && !self.ctrl_c_t_wait_flag {
                 self.poll_cpp_check();
             }
 
@@ -71,7 +75,8 @@ impl App {
             // Wait for event; ignore key release to avoid handling a keystroke twice.
             // Wake up sooner while a completion answer is expected.
             let mut timeout = interval.saturating_sub(last_disk_check.elapsed());
-            if self.completion.is_waiting() || self.quick_fix.is_waiting() {
+            if self.terminal.visible || self.completion.is_waiting() || self.quick_fix.is_waiting()
+            {
                 timeout = timeout.min(Duration::from_millis(20));
             }
             if event::poll(timeout)?
@@ -87,6 +92,9 @@ impl App {
     }
 
     pub(crate) fn handle_key(&mut self, key: KeyEvent) {
+        if self.handle_terminal_key(key) {
+            return;
+        }
         // Print key in buffer command section in bottom tool bar.
         let prefix = match (self.ctrl_x_wait_flag, self.ctrl_c_wait_flag) {
             (true, _) => "C-x ",

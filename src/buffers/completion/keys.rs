@@ -41,7 +41,8 @@ impl App {
                 use crate::buffers::cpp_checks::Tool;
                 match key.code {
                     KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
-                    KeyCode::Char('t') => self.run_cpp_check(Tool::Tidy),
+                    // C-c t is a prefix; handle_terminal_key reads the next key.
+                    KeyCode::Char('t') => self.ctrl_c_t_wait_flag = true,
                     KeyCode::Char('a') => self.request_fix(),
                     _ => {}
                 }
