@@ -22,5 +22,10 @@ target
 
 
 # Added by cargo
-
 /target
+
+## Archlinux packaging
+arch/src/*
+arch/pkg/*
+arch/*.pkg.tar.*
+arch/*.log
