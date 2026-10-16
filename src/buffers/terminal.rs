@@ -348,6 +348,7 @@ impl crate::app::App {
     pub(crate) fn prompt_open(&self) -> bool {
         self.cpp_check_modal()
             || self.overwrite_confirm
+            || self.tabs.close_confirm
             || self.save_path_input.is_some()
             || self.search.reads_input()
             || self.goto_line.is_open()
@@ -375,16 +376,11 @@ impl crate::app::App {
                 if let Err(err) = self.terminal.toggle(cwd) {
                     self.status_bar_text = format!("Terminal failed: {err}");
                 }
+                // Only one pane has focus.
+                self.sidebar.focused &= !self.terminal.focused;
             } else if plain('c') {
                 self.run_cpp_check(crate::buffers::cpp_checks::Tool::Tidy);
             }
-            return true;
-        }
-
-        // C-x o moves focus between the editor and the terminal, like Emacs.
-        if self.ctrl_x_wait_flag && plain('o') && self.terminal.visible {
-            self.ctrl_x_wait_flag = false;
-            self.terminal.focused = !self.terminal.focused;
             return true;
         }
 

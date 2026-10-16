@@ -30,3 +30,4 @@ pub(crate) use client::Client;
 pub(crate) use diagnostics::{Diagnostic, Severity};
 pub(crate) use normalize::{Candidate, Completions};
 pub(crate) use plugin::{Plugin, language_id, load as load_plugins};
+pub(crate) use workspace::find_root;

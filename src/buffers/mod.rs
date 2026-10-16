@@ -24,4 +24,6 @@ pub(crate) mod menu;
 pub(crate) mod paste;
 mod render;
 pub(crate) mod search;
+pub(crate) mod sidebar;
+pub(crate) mod tabs;
 pub(crate) mod terminal;

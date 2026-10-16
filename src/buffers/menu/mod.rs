@@ -110,14 +110,17 @@ fn items(
             ("Complete", "M-/"),
             ("Quick Fix", "C-c a"),
         ],
-        (WINDOW_MENU, _) => vec![(
-            if nerd_font {
-                "NF Mode: On"
-            } else {
-                "NF Mode: Off"
-            },
-            "",
-        )],
+        (WINDOW_MENU, _) => vec![
+            (
+                if nerd_font {
+                    "NF Mode: On"
+                } else {
+                    "NF Mode: Off"
+                },
+                "",
+            ),
+            ("File Tree", "C-c c t"),
+        ],
         (CPP_MENU, Some(settings)) => cpp_entries(settings)
             .into_iter()
             .map(|(label, shortcut, _)| (label, shortcut))
@@ -330,7 +333,11 @@ impl App {
                         self.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
                     }
                 } else if active == WINDOW_MENU {
-                    self.toggle_nerd_font();
+                    if selected == 0 {
+                        self.toggle_nerd_font();
+                    } else {
+                        self.toggle_sidebar();
+                    }
                 } else if active == CPP_MENU {
                     // selected indexes the same entries the popup showed.
                     match cpp_entries(&self.cpp_checks.settings)[selected].2 {

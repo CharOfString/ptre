@@ -43,6 +43,8 @@ impl App {
                     KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
                     // C-c t is a prefix; handle_terminal_key reads the next key.
                     KeyCode::Char('t') => self.ctrl_c_t_wait_flag = true,
+                    // C-c c is a prefix; handle_sidebar_key reads the next key.
+                    KeyCode::Char('c') => self.sidebar.prefix = true,
                     KeyCode::Char('a') => self.request_fix(),
                     _ => {}
                 }
