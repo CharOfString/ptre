@@ -1,3 +1,9 @@
+ptre (0.1.5-2) unstable; urgency=medium
+
+  * Fixed Archlinux build.
+
+ -- CharOfString <root@charofstring.cc>  Fri, 16 Oct 2026 00:36:11 -0500
+
 ptre (0.1.5-1) unstable; urgency=medium
 
   * Added example codes.
