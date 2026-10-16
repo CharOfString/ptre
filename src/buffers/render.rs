@@ -30,6 +30,16 @@ impl App {
         .areas(frame.area());
         self.menu.draw_bar(frame, menu_area, self.is_c_or_cpp());
 
+        let editor_area = if self.terminal.visible {
+            let [editor, terminal] = super::terminal::split(editor_area);
+            if let Err(err) = self.terminal.draw(frame, terminal) {
+                self.status_bar_text = format!("Terminal resize failed: {err}");
+            }
+            editor
+        } else {
+            editor_area
+        };
+
         // Editor buffer.
         let name = self
             .buffer
@@ -70,7 +80,8 @@ impl App {
         self.draw_completion(frame);
         self.draw_fix_chooser(frame);
         self.draw_diagnostic_popup(frame);
-        if !self.cpp_check_modal()
+        if !self.terminal.focused
+            && !self.cpp_check_modal()
             && self.save_path_input.is_none()
             && !self.search.reads_input()
             && !self.goto_line.is_open()
@@ -100,22 +111,28 @@ impl App {
                 .path
                 .as_ref()
                 .map_or_else(|| "[No Name]".to_owned(), |path| path.display().to_string());
+            // A focused terminal takes all keys, so show its keys instead.
+            let hints = if self.terminal.focused {
+                "C-x o: focus ※  M-v/C-v: scroll"
+            } else {
+                "F10: menu ※  C-c t t: terminal"
+            };
 
             if self.status_bar_text.is_empty() {
                 if self.buffer_command.is_empty() {
-                    format!(" {name} ※  F10: menu")
+                    format!(" {name} ※  {hints}")
                 } else {
                     format!(
-                        " {name} ※  F10: menu ※  Buffer command: {}",
+                        " {name} ※  {hints} ※  Buffer command: {}",
                         self.buffer_command
                     )
                 }
             } else {
                 if self.buffer_command.is_empty() {
-                    format!(" {name} ※  F10: menu ※  {}", self.status_bar_text)
+                    format!(" {name} ※  {hints} ※  {}", self.status_bar_text)
                 } else {
                     format!(
-                        " {name} ※  F10: menu ※  Buffer command: {}  ※ {}",
+                        " {name} ※  {hints} ※  Buffer command: {}  ※ {}",
                         self.buffer_command, self.status_bar_text
                     )
                 }
