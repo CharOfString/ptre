@@ -1,3 +1,11 @@
+ptre (0.1.5-1) unstable; urgency=medium
+
+  * Added example codes.
+  * Added a terminal emulator wrapper.
+  * Added Archlinux packaging.
+
+ -- CharOfString <root@charofstring.cc>  Fri, 16 Oct 2026 00:27:02 -0500
+
 ptre (0.1.4-1) unstable; urgency=medium
 
   * Added icon mode for non-tty use.
