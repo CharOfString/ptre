@@ -18,6 +18,10 @@ mod lsp;
 mod utils;
 
 use app::App;
+use crossterm::{
+    event::{DisableBracketedPaste, EnableBracketedPaste},
+    execute,
+};
 use std::{ffi::OsString, io, path::PathBuf};
 
 // Main app of Pointer.
@@ -37,7 +41,13 @@ fn main() -> io::Result<()> {
         app.buffer.open(path)?;
     }
 
-    ratatui::run(|terminal| app.run(terminal))
+    ratatui::run(|terminal| {
+        // Ask the terminal emulator to send pasted text in one piece, not as single keys.
+        execute!(io::stdout(), EnableBracketedPaste)?;
+        let result = app.run(terminal);
+        execute!(io::stdout(), DisableBracketedPaste)?;
+        result
+    })
 }
 
 // Validate the file arguments

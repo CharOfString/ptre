@@ -65,6 +65,11 @@ impl App {
             Layout::vertical([Constraint::Min(0), Constraint::Length(2)])
                 .areas(border.inner(editor_area));
         self.editor_area = content_area;
+        // While the paste scroll runs, draw the editor parts from its current line.
+        let offset_y = self.buffer.editor.get_offset_y();
+        if let Some(line) = self.paste_scroll_offset() {
+            self.buffer.editor.set_offset_y(line);
+        }
         frame.render_widget(border, editor_area);
         frame.render_widget(&self.buffer.editor, self.editor_area);
         self.draw_diagnostics(frame);
@@ -91,6 +96,7 @@ impl App {
         {
             frame.set_cursor_position((x, y));
         }
+        self.buffer.editor.set_offset_y(offset_y);
 
         // status_bar_text bar.
         let status_bar_text_text = if let Some(input) = &self.cpp_checks.path_input {

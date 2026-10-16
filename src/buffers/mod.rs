@@ -21,6 +21,7 @@ mod editor_status;
 pub(crate) mod fixes;
 pub(crate) mod goto_line;
 pub(crate) mod menu;
+pub(crate) mod paste;
 mod render;
 pub(crate) mod search;
 pub(crate) mod terminal;

@@ -57,6 +57,11 @@ impl Search {
     pub(crate) fn reads_input(&self) -> bool {
         matches!(self.mode, Some(Mode::ReplaceFrom(_) | Mode::ReplaceTo(..)))
     }
+
+    // True while search or replace is running.
+    pub(crate) fn is_active(&self) -> bool {
+        self.mode.is_some()
+    }
 }
 
 impl App {

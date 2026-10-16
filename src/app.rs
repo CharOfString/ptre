@@ -44,6 +44,7 @@ pub(crate) struct App {
     pub(crate) quick_fix: crate::buffers::fixes::QuickFix,
     pub(crate) search: crate::buffers::search::Search,
     pub(crate) goto_line: crate::buffers::goto_line::GotoLine,
+    pub(crate) paste_scroll: Option<crate::buffers::paste::Scroll>,
     // Draw icons from a Nerd Font (WINDOW menu).
     pub(crate) nerd_font: bool,
 }
@@ -73,18 +74,22 @@ impl App {
             terminal.draw(|frame| self.draw(frame))?;
 
             // Wait for event; ignore key release to avoid handling a keystroke twice.
-            // Wake up sooner while a completion answer is expected.
+            // Wake up sooner while a completion answer is expected or the view scrolls.
             let mut timeout = interval.saturating_sub(last_disk_check.elapsed());
-            if self.terminal.visible || self.completion.is_waiting() || self.quick_fix.is_waiting()
+            if self.terminal.visible
+                || self.completion.is_waiting()
+                || self.quick_fix.is_waiting()
+                || self.paste_scroll.is_some()
             {
                 timeout = timeout.min(Duration::from_millis(20));
             }
-            if event::poll(timeout)?
-                && let Event::Key(key) = event::read()?
-                && key.kind != KeyEventKind::Release
-            {
-                // Update status_bar_text
-                self.handle_key(key);
+            if event::poll(timeout)? {
+                match event::read()? {
+                    Event::Key(key) if key.kind != KeyEventKind::Release => self.handle_key(key),
+                    // Pasted text comes in one piece and becomes one edit.
+                    Event::Paste(text) => self.handle_paste(text),
+                    _ => {}
+                }
             }
         }
 
