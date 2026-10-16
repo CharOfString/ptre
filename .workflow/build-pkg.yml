@@ -18,6 +18,8 @@ stages:
     - "# The image ships without a local signing key; create one."
     - pacman-key --init
     - pacman-key --populate
+    - "# Docker blocks the pacman download sandbox (Landlock); turn it off."
+    - sed -i "/^\[options\]/a DisableSandbox" /etc/pacman.conf
     - "# cargo is a virtual package, so pick the rust provider here."
     - pacman -Syu --noconfirm --needed base-devel rust
     - ""
