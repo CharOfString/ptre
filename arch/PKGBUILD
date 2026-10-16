@@ -1,8 +1,8 @@
 # Maintainer: CharOfString <root@charofstring.cc>
 
 pkgname=ptre
-pkgver=0.1.5
-pkgrel=2
+pkgver=0.1.6
+pkgrel=1
 pkgdesc='Lightweight text editor'
 arch=('x86_64' 'aarch64')
 url='https://github.com/CharOfString/ptre'
