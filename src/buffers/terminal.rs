@@ -149,13 +149,32 @@ impl Terminal {
     }
 
     pub(crate) fn input(&mut self, key: KeyEvent) -> io::Result<()> {
+        let Some(session) = &self.session else {
+            return Ok(());
+        };
+        let bytes = encode_key(key, session.parser.screen().application_cursor());
+        self.write(&bytes)
+    }
+
+    // Send pasted text. Mark its start and end when the program asked for that.
+    pub(crate) fn paste(&mut self, text: &str) -> io::Result<()> {
+        let Some(session) = &self.session else {
+            return Ok(());
+        };
+        if session.parser.screen().bracketed_paste() {
+            self.write(format!("\x1b[200~{text}\x1b[201~").as_bytes())
+        } else {
+            self.write(text.as_bytes())
+        }
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
         if let Some(session) = &mut self.session {
             session.parser.screen_mut().set_scrollback(0);
             if session.exited {
                 return Ok(());
             }
-            let bytes = encode_key(key, session.parser.screen().application_cursor());
-            session.writer.write_all(&bytes)?;
+            session.writer.write_all(bytes)?;
             session.writer.flush()?;
         }
         Ok(())
@@ -325,15 +344,19 @@ fn encode_key(key: KeyEvent, application_cursor: bool) -> Vec<u8> {
 }
 
 impl crate::app::App {
-    pub(crate) fn handle_terminal_key(&mut self, key: KeyEvent) -> bool {
-        // Modal editor prompts retain their input and focus.
-        if self.cpp_check_modal()
+    // True while a dialog, a prompt or the menu reads the keys.
+    pub(crate) fn prompt_open(&self) -> bool {
+        self.cpp_check_modal()
             || self.overwrite_confirm
             || self.save_path_input.is_some()
             || self.search.reads_input()
             || self.goto_line.is_open()
             || self.menu.active.is_some()
-        {
+    }
+
+    pub(crate) fn handle_terminal_key(&mut self, key: KeyEvent) -> bool {
+        // Modal editor prompts retain their input and focus.
+        if self.prompt_open() {
             return false;
         }
         let plain = |c| key.code == KeyCode::Char(c) && key.modifiers.is_empty();
