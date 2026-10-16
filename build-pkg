@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# Copyright (C) 2026 CharOfString
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+# Build an installable Archlinux package for easy deployment and removal on test machines.
+#
+# Package details come from arch/PKGBUILD rather than being hard-coded here.
+#
+# Usage: ./build-arch [options]
+#
+# Options:
+#    -d, --install-deps    Install build dependencies first, then build.
+#    -c, --clean           Clean build artifacts and exit.
+#    -h, --help            Show help.
+
+set -o pipefail
+
+PROJ_ROOT="$(cd "$(dirname "$0")" && pwd)"
+ARCH_DIR="$PROJ_ROOT/arch"
+
+INSTALL_DEPS=false
+ACT_CLEANUPS=false
+
+# Show help.
+print_help() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Options:"
+    echo "  -d, --install-deps    Install build dependencies from arch/PKGBUILD, then build"
+    echo "  -c, --clean           Clean build artifacts and exit"
+    echo "  -h, --help            Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 -d                # Install build dependencies and build"
+    echo "  $0                   # Build with dependencies already installed"
+    echo "  $0 -c                # Clean build artifacts"
+    exit 0
+}
+
+# Parse arguments.
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -c|--clean)
+                ACT_CLEANUPS=true
+                shift
+                ;;
+            -d|--install-deps)
+                INSTALL_DEPS=true
+                shift
+                ;;
+            -h|--help)
+                print_help
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "The following help may be useful:"
+                print_help
+                ;;
+        esac
+    done
+}
+
+# Check whether a command is available.
+is_cmd_exists() {
+    command -v "$1" &> /dev/null
+}
+
+# Validate the project layout.
+detect_project() {
+    if [[ ! -f "$ARCH_DIR/PKGBUILD" ]]; then
+        echo "Error: arch/PKGBUILD was not found under $PROJ_ROOT."
+        echo "Place this script next to arch/ in the project root."
+        exit 1
+    fi
+    echo "Project root: $PROJ_ROOT"
+}
+
+# Check basic tools; arch/PKGBUILD declares the remaining build dependencies.
+check_toolchains() {
+    echo "Checking basic build tools..."
+    if ! is_cmd_exists makepkg || ! is_cmd_exists pacman; then
+        echo "Missing makepkg or pacman. Please run this script on Archlinux."
+        echo "Try: sudo pacman -S --needed base-devel"
+        exit 1
+    fi
+    echo "Basic build tools are available."
+}
+
+# Clean build artifacts.
+exec_clean() {
+    echo "Cleaning build artifacts..."
+    cd "$ARCH_DIR" || exit 1
+
+    # Remove the packages that makepkg builds, wherever PKGDEST puts them.
+    local packages=()
+    mapfile -t packages < <(makepkg --packagelist 2>/dev/null)
+    rm -f -- "${packages[@]}"
+    rm -rf src/ pkg/
+
+    echo "Cleanup complete."
+}
+
+# Build packages.
+exec_build() {
+    local makepkg_args=("-f")
+    # makepkg -s installs missing dependencies with pacman.
+    if [[ "$INSTALL_DEPS" == true ]]; then
+        makepkg_args+=("-s")
+    fi
+    # pacman cannot see Rust from the rustup script, so use the cargo on PATH.
+    if is_cmd_exists cargo && ! pacman -T cargo &> /dev/null; then
+        echo "Note: cargo was not installed by pacman; skipping the dependency check."
+        makepkg_args+=("-d")
+    fi
+
+    cd "$ARCH_DIR" || exit 1
+    echo "Building with makepkg (options: ${makepkg_args[*]})..."
+    makepkg "${makepkg_args[@]}" || exit 1
+
+    echo "Build complete. Archlinux packages:"
+    local package
+    while read -r package; do
+        if [[ -f "$package" ]]; then
+            echo "  $package"
+        fi
+    done < <(makepkg --packagelist)
+}
+
+# Main entry point.
+echo "============================================="
+echo "      Pointer Arch Build Script REL 1.0.0"
+echo "============================================="
+echo ""
+
+parse_args "$@"
+detect_project
+
+if [[ "$ACT_CLEANUPS" == true ]]; then
+    exec_clean
+    exit 0
+fi
+
+check_toolchains
+exec_build
