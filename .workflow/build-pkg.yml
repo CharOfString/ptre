@@ -1,0 +1,56 @@
+version: "1.0"
+name: build-pkg
+displayName: Build Arch Linux packages
+stages:
+- name: Arch Linux x86_64
+  displayName: Arch Linux x86_64
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: execute@docker
+    name: build_pkg
+    displayName: Build pkg
+    image: archlinux:base-devel
+    command:
+    - set -euo pipefail
+    - test "$(uname -m)" = x86_64
+    - ""
+    - "# The image ships without a local signing key; create one."
+    - pacman-key --init
+    - pacman-key --populate
+    - "# cargo is a virtual package, so pick the rust provider here."
+    - pacman -Syu --noconfirm --needed base-devel rust
+    - ""
+    - "# makepkg refuses to run as root, so build as a normal user."
+    - useradd -m builder
+    - "echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder"
+    - chown -R builder .
+    - ""
+    - "# check() in arch/PKGBUILD also runs the release tests."
+    - (cd arch && sudo -u builder makepkg --syncdeps --noconfirm --force)
+    - ""
+    - mkdir -p dist
+    - for package in arch/*.pkg.tar.*; do
+    - '  case "$package" in *-debug-*) continue ;; esac'
+    - '  cp "$package" dist/'
+    - done
+    - test -n "$(find dist -maxdepth 1 -name '*.pkg.tar.*' -print -quit)"
+    artifacts:
+    - name: PKG_PACKAGES
+      path:
+      - dist
+      type: .tar.gz
+  - step: publish@general_artifacts
+    name: publish_pkg
+    displayName: Publish packages
+    dependArtifact: PKG_PACKAGES
+    artifactName: arch-packages-x86_64
+triggers:
+  trigger: auto
+  push:
+    tags:
+      prefix:
+      - ""
+      precise: []
+      include: []
+notify: []
