@@ -104,6 +104,27 @@ $ ./build-deb -c
 
 请注意：执行清理后构建产物会被一并删除。
 
+#### Archlinux
+> **注意**: 您必须在打包期间保持网络连接
+
+对于第一次打`zstd`包，请执行：
+```bash
+$ ./build-pkg -d
+```
+
+依赖会被自动下载安装至您的系统，下一次只需要执行如下命令即可：
+
+```bash
+$ ./build-pkg
+```
+
+构建后要清理仓库，请执行：
+```bash
+$ ./build-pkg -c
+```
+
+请注意：执行清理后构建产物会被一并删除。
+
 <p align="right">(<a href="#readme-top">回到顶部</a>)</p>
 
 
@@ -136,7 +157,7 @@ _对于更多示例，请访问[文档目录](./doc/)。_
   - [ ] 提供国际化翻译
 - [ ] 打包
   - [X] Debian
-  - [ ] Archlinux
+  - [X] Archlinux
   - [ ] Fedore/OpenSUSE
   - [ ] Nix
   - [ ] AmberPM
