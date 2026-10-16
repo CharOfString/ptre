@@ -105,10 +105,10 @@ fn status_bar_shows_keys_of_focused_pane() {
             .collect::<String>()
     };
     app.terminal.visible = true;
-    assert!(status(&mut app).contains("F10: menu  C-c t t: terminal"));
+    assert!(status(&mut app).contains("F10: menu ※  C-c t t: terminal"));
     app.terminal.focused = true;
     let text = status(&mut app);
-    assert!(text.contains("C-x o: focus  M-v/C-v: scroll"));
+    assert!(text.contains("C-x o: focus ※  M-v/C-v: scroll"));
     assert!(!text.contains("F10"));
 }
 

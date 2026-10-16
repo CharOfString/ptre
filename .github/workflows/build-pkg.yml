@@ -1,0 +1,125 @@
+name: Build Arch Linux packages
+
+on:
+  push:
+    tags:
+      - '**'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+# Serialize tag/release runs for the same tag to avoid competing asset uploads.
+concurrency:
+  group: build-pkg-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: archlinux / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The official Arch Linux image is x86_64 only, so aarch64 uses an
+          # Arch Linux ARM image that is rebuilt daily.
+          - arch: x86_64
+            runner: ubuntu-24.04
+            image: archlinux:base-devel
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+            image: menci/archlinuxarm:base-devel
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      # Build on a native-architecture runner. Keep release tooling on the
+      # host, outside the build container.
+      - name: Build Arch Linux packages
+        env:
+          BUILD_IMAGE: ${{ matrix.image }}
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: |
+          host_uid="$(id -u)"
+          docker run --rm \
+            -e BUILD_ARCH -e HOST_UID="$host_uid" \
+            -v "$GITHUB_WORKSPACE:/build/ptre" \
+            -w /build/ptre "$BUILD_IMAGE" bash -euo pipefail -c '
+              test "$(uname -m)" = "$BUILD_ARCH"
+              # The images ship without a local signing key; create one.
+              pacman-key --init
+              pacman-key --populate
+              # cargo is a virtual package, so pick the rust provider here.
+              pacman -Syu --noconfirm --needed base-devel rust
+
+              # makepkg refuses to run as root. Use the host UID so the build
+              # user can write to the checkout and the host can read the output.
+              useradd -m -u "$HOST_UID" builder
+              echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+
+              # check() in arch/PKGBUILD also runs the release tests.
+              cd arch
+              sudo -u builder makepkg --syncdeps --noconfirm --force
+              mkdir -p ../dist
+              cp -- *.pkg.tar.* ../dist/
+              # Subsequent workflow steps run as the host runner, not container root.
+              chown -R "$HOST_UID" ../dist
+            '
+
+      - name: Remove debug packages
+        run: |
+          shopt -s nullglob
+          debug_packages=(dist/*-debug-*.pkg.tar.*)
+          if (( ${#debug_packages[@]} > 0 )); then
+            printf 'Removing debug symbol packages:\n%s\n' "${debug_packages[@]}"
+            rm -- "${debug_packages[@]}"
+          fi
+          packages=(dist/*.pkg.tar.*)
+          if (( ${#packages[@]} == 0 )); then
+            echo '::error::No non-debug Arch Linux packages were built.'
+            exit 1
+          fi
+
+      - name: Save build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-packages-${{ matrix.arch }}
+          path: dist/*.pkg.tar.*
+          if-no-files-found: error
+
+      - name: Upload to the corresponding release if it exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          encoded_tag="$(jq -rn --arg tag "$RELEASE_TAG" '$tag | @uri')"
+          status="$(curl --silent --show-error --retry 3 \
+            --output "$RUNNER_TEMP/ptre-release.json" --write-out '%{http_code}' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'Accept: application/vnd.github+json' \
+            "$GITHUB_API_URL/repos/$GH_REPO/releases/tags/$encoded_tag")"
+          case "$status" in
+            200)
+              gh release upload "$RELEASE_TAG" dist/*.pkg.tar.* --clobber
+              ;;
+            404)
+              if [[ "$GITHUB_EVENT_NAME" == release ]]; then
+                echo '::error::The triggering release could not be found.'
+                exit 1
+              fi
+              echo 'No release exists for this tag; packages are available in Actions artifacts.'
+              ;;
+            *)
+              echo "::error::Release lookup failed (HTTP $status)."
+              exit 1
+              ;;
+          esac

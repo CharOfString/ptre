@@ -108,6 +108,30 @@ $ ./build-deb -c
 
 Note that this will also clear the artifacts generated.
 
+#### Archlinux
+> **NOTE**: Network connection WILL BE REQUIRED!!
+
+To build a Arch `zstd` package, simply run:
+
+```shell
+$ ./build-pkg -d
+```
+
+Dependencies will automatically being installed to your computer.
+
+Next time you may run:
+
+```shell
+$ ./build-pkg
+```
+
+To do a cleanup, run:
+```shell
+$ ./build-pkg -c
+```
+
+Note that this will also clear the artifacts generated.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
@@ -141,7 +165,7 @@ _For more examples, please refer to the [documentation directory](./doc/)._
   - [ ] Provide i18n translations.
 - [ ] Packaging
   - [X] Debian.
-  - [ ] Archlinux.
+  - [X] Archlinux.
   - [ ] Fedore/OpenSUSE.
   - [ ] Nix.
   - [ ] AmberPM.
