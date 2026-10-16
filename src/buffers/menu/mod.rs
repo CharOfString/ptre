@@ -78,7 +78,7 @@ fn cpp_entries(settings: &Settings) -> Vec<(&'static str, &'static str, CppActio
     ];
 
     if settings.tidy {
-        entries.push(("Run Clang-tidy", "C-c t", CppAction::Run(Tool::Tidy)));
+        entries.push(("Run Clang-tidy", "C-c t c", CppAction::Run(Tool::Tidy)));
     }
 
     if settings.cpplint_ready() {
