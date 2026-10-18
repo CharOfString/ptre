@@ -99,7 +99,7 @@ impl App {
             || self.ctrl_x_wait_flag
             || self.ctrl_c_wait_flag
             || self.ctrl_c_t_wait_flag
-            || self.sidebar.prefix
+            || self.sidebar.prefix.is_some()
     }
 }
 

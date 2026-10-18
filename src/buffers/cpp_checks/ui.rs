@@ -33,12 +33,8 @@ impl App {
                     self.status_bar_text = "Cpplint setup cancelled".into();
                 }
                 KeyCode::Enter => {
-                    let path = if let Some(rest) = input.strip_prefix("~/") {
-                        std::env::var_os("HOME").map(|home| PathBuf::from(home).join(rest))
-                    } else {
-                        Some(PathBuf::from(input.as_str()))
-                    };
-                    let path = path.and_then(|path| path.canonicalize().ok());
+                    let path = crate::utils::path::expand_home(input)
+                        .and_then(|path| path.canonicalize().ok());
                     if let Some(path) = path.filter(|path| settings::executable(path)) {
                         let mut settings = self.cpp_checks.settings.clone();
                         settings.cpplint_path = path.to_string_lossy().into_owned();

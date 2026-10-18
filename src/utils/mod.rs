@@ -14,3 +14,4 @@
 
 pub(crate) mod file_type;
 pub(crate) mod keys;
+pub(crate) mod path;

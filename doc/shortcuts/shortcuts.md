@@ -35,6 +35,7 @@ hide and reopen the terminal to start a new session.
 
 * `Ctrl + C` `C` `T`: show or hide the file tree on the left, like Emacs Treemacs.
   It is also in the WINDOW menu. Showing the tree gives it focus.
+* `Ctrl + C` `Ctrl + P` `A`: open a project. Type a folder path and press `Enter`.
 * `N` / `P`: next / previous row. `Down` / `Up` and `Ctrl + N` / `Ctrl + P` also work.
 * `Tab`: open or close the selected folder.
 * `Enter`: open the selected file in a new tab (or go to its tab when it is open already),
@@ -47,6 +48,8 @@ The tree starts at the project of the current file: the nearest folder above it 
 `.git`, `Cargo.toml`, `CMakeLists.txt`, `compile_commands.json` or `compile_flags.txt`
 (otherwise the file's own folder). For an unnamed file, it starts at the editor's working directory.
 It opens the folders above the current file and selects it. The `.git` folder is not shown.
+When the tree is shown again, it keeps its folder (such as an opened project) while the
+current file is inside it.
 
 ## Tabs
 

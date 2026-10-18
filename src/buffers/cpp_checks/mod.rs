@@ -190,6 +190,7 @@ impl App {
         if self.save_path_input.is_some()
             || self.overwrite_confirm
             || self.cpp_checks.path_input.is_some()
+            || self.sidebar.project_input.is_some()
             || self.menu.active.is_some()
         {
             return;

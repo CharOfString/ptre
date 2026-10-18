@@ -24,7 +24,11 @@ use ratatui::{
 };
 
 pub(crate) const LIGHT_BLUE: Color = Color::Rgb(155, 205, 245);
-const FILE: &[(&str, &str)] = &[("Save", "C-x C-s"), ("Quit", "C-x C-c")];
+const FILE: &[(&str, &str)] = &[
+    ("Open Project", "C-c C-p a"),
+    ("Save", "C-x C-s"),
+    ("Quit", "C-x C-c"),
+];
 const EDIT: &[(&str, &str)] = &[
     ("Undo", "C-x u"),
     ("Redo", "C-M-_"),
@@ -309,11 +313,15 @@ impl App {
                 let ctrl = KeyModifiers::CONTROL;
                 let alt = KeyModifiers::ALT;
                 if active == 0 {
-                    self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
-                    self.handle_key(KeyEvent::new(
-                        KeyCode::Char(if selected == 0 { 's' } else { 'c' }),
-                        ctrl,
-                    ));
+                    if selected == 0 {
+                        self.ask_project();
+                    } else {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
+                        self.handle_key(KeyEvent::new(
+                            KeyCode::Char(if selected == 1 { 's' } else { 'c' }),
+                            ctrl,
+                        ));
+                    }
                 } else if active == BUFFER_MENU {
                     if selected == 3 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('g'), alt));

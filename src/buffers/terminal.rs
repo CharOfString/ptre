@@ -350,6 +350,7 @@ impl crate::app::App {
             || self.overwrite_confirm
             || self.tabs.close_confirm
             || self.save_path_input.is_some()
+            || self.sidebar.project_input.is_some()
             || self.search.reads_input()
             || self.goto_line.is_open()
             || self.menu.active.is_some()

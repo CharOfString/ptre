@@ -173,6 +173,54 @@ fn revealed_file_is_drawn_in_the_middle() {
 }
 
 #[test]
+fn ctrl_c_ctrl_p_a_opens_a_project_that_stays() {
+    let project = Project::new();
+    let src = project.0.join("src").canonicalize().unwrap();
+    let mut app = App::default();
+    app.buffer.open(project.0.join("a.txt")).unwrap();
+    let open_project = |app: &mut App| {
+        key(app, KeyCode::Char('c'), CONTROL);
+        key(app, KeyCode::Char('p'), CONTROL);
+        key(app, KeyCode::Char('a'), NONE);
+        assert!(app.sidebar.project_input.is_some());
+    };
+    open_project(&mut app);
+    key(&mut app, KeyCode::Esc, NONE);
+    assert_eq!(app.status_bar_text, "Open project cancelled");
+
+    // A missing folder keeps the prompt open; typing never reaches the buffer.
+    open_project(&mut app);
+    app.handle_paste("/missing".into());
+    key(&mut app, KeyCode::Enter, NONE);
+    assert_eq!(app.status_bar_text, "No such folder");
+    for _ in 0.."/missing".len() {
+        key(&mut app, KeyCode::Backspace, NONE);
+    }
+    app.handle_paste(src.display().to_string());
+    key(&mut app, KeyCode::Enter, NONE);
+    assert_eq!(app.buffer.editor.get_content(), "a.txt");
+    assert!(app.sidebar.project_input.is_none() && app.sidebar.focused);
+    assert_eq!(app.sidebar.root, src);
+    assert_eq!(rows(&app), ["inner", "main.rs"]);
+
+    // The tree keeps the project while the open file is inside it.
+    key(&mut app, KeyCode::Down, NONE);
+    key(&mut app, KeyCode::Enter, NONE);
+    toggle(&mut app);
+    toggle(&mut app);
+    assert_eq!(app.sidebar.root, src);
+    assert_eq!(selected(&app), "main.rs");
+
+    // Back in a.txt, it starts at the project of a.txt again.
+    key(&mut app, KeyCode::Char('x'), CONTROL);
+    key(&mut app, KeyCode::Left, NONE);
+    toggle(&mut app);
+    toggle(&mut app);
+    assert_eq!(app.sidebar.root, project.0);
+    assert_eq!(selected(&app), "a.txt");
+}
+
+#[test]
 fn files_below_the_working_directory_open_with_a_short_path() {
     let mut app = App::default();
     app.buffer.open(PathBuf::from("src/main.rs")).unwrap();

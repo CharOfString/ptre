@@ -116,6 +116,11 @@ impl App {
             )
         } else if let Some(prompt) = self.search.prompt() {
             format!(" {prompt}")
+        } else if let Some(input) = &self.sidebar.project_input {
+            format!(
+                " Open project: {input}█  ※  Enter: open  Esc: cancel  ※  {}",
+                self.status_bar_text
+            )
         } else if let Some(path_input) = &self.save_path_input {
             format!(
                 " Save as: {path_input}█  ※  Enter: save  Esc: cancel  ※  {}",

@@ -34,8 +34,10 @@ use std::{
 pub(crate) struct Sidebar {
     pub(crate) visible: bool,
     pub(crate) focused: bool,
-    // Set after C-c c, which waits for its next key.
-    pub(crate) prefix: bool,
+    // Set after C-c c or C-c C-p, which wait for their next key.
+    pub(crate) prefix: Option<Prefix>,
+    // The folder typed after C-c C-p a, while the prompt is open.
+    pub(crate) project_input: Option<String>,
     root: PathBuf,
     // Folders that show their content.
     expanded: HashSet<PathBuf>,
@@ -44,6 +46,14 @@ pub(crate) struct Sidebar {
     list: ListState,
     // Set when the open file was selected; the next frame scrolls it to the middle.
     reveal: bool,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum Prefix {
+    // C-c c, as in C-c c t.
+    Tree,
+    // C-c C-p, as in C-c C-p a. Treemacs keeps its project commands here.
+    Project,
 }
 
 // The bar under the selected row, as the buttons in the confirm dialog.
@@ -100,6 +110,7 @@ impl Sidebar {
         if root != self.root {
             self.root = root;
             self.expanded.clear();
+            self.list = ListState::default();
         }
         let file = file.filter(|file| file.starts_with(&self.root));
         if let Some(file) = file {
@@ -211,26 +222,86 @@ impl Sidebar {
 }
 
 impl App {
+    fn absolute_path(&self) -> Option<PathBuf> {
+        let path = self.buffer.path.as_deref()?;
+        std::path::absolute(path).ok()
+    }
+
     // Show the tree and give it focus, or hide it.
     pub(crate) fn toggle_sidebar(&mut self) {
-        self.sidebar.visible = !self.sidebar.visible;
-        self.sidebar.focused = self.sidebar.visible;
-        if !self.sidebar.visible {
+        if self.sidebar.visible {
+            self.sidebar.visible = false;
+            self.sidebar.focused = false;
             return;
         }
+        // Keep the folder shown last while the open file is inside it, as after C-c C-p a.
+        // Else start at the project of the open file, or at the working directory.
+        let file = self.absolute_path();
+        let root = &self.sidebar.root;
+        let keep =
+            !root.as_os_str().is_empty() && file.as_ref().is_none_or(|file| file.starts_with(root));
+        let root = if keep {
+            root.clone()
+        } else {
+            file.as_deref()
+                .and_then(|file| crate::lsp::find_root(file).ok())
+                .or_else(|| std::env::current_dir().ok())
+                .unwrap_or_else(|| PathBuf::from("."))
+        };
+        self.show_sidebar(root);
+    }
+
+    // Show the tree of `root` with focus, and select the open file when it is inside.
+    fn show_sidebar(&mut self, root: PathBuf) {
+        self.sidebar.visible = true;
+        self.sidebar.focused = true;
         self.terminal.focused = false;
-        // The tree starts at the project of the open file, or at the working directory.
-        let file = self
-            .buffer
-            .path
-            .as_deref()
-            .and_then(|path| std::path::absolute(path).ok());
-        let root = file
-            .as_deref()
-            .and_then(|file| crate::lsp::find_root(file).ok())
-            .or_else(|| std::env::current_dir().ok())
-            .unwrap_or_else(|| PathBuf::from("."));
+        let file = self.absolute_path();
         self.sidebar.show(root, file.as_deref());
+    }
+
+    // C-c C-p a: ask for a folder and show its tree, as treemacs-add-project-to-workspace.
+    pub(crate) fn ask_project(&mut self) {
+        self.sidebar.project_input = Some(String::new());
+        self.status_bar_text = "Enter a folder path".into();
+    }
+
+    // Keys of the open project prompt. Returns true while the prompt is open.
+    fn handle_project_input(&mut self, key: KeyEvent) -> bool {
+        let Some(input) = &mut self.sidebar.project_input else {
+            return false;
+        };
+        match key.code {
+            KeyCode::Esc => {
+                self.sidebar.project_input = None;
+                self.status_bar_text = "Open project cancelled".into();
+            }
+            KeyCode::Enter => {
+                // Relative paths start at the working directory.
+                let dir = crate::utils::path::expand_home(input.trim())
+                    .and_then(|dir| dir.canonicalize().ok())
+                    .filter(|dir| dir.is_dir());
+                if let Some(dir) = dir {
+                    self.sidebar.project_input = None;
+                    self.status_bar_text.clear();
+                    self.show_sidebar(dir);
+                } else {
+                    self.status_bar_text = "No such folder".into();
+                }
+            }
+            KeyCode::Backspace => {
+                input.pop();
+            }
+            KeyCode::Char(c)
+                if !key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) =>
+            {
+                input.push(c)
+            }
+            _ => {}
+        }
+        true
     }
 
     // C-x o: focus the next visible pane, in the order tree, editor, terminal.
@@ -276,13 +347,19 @@ impl App {
         self.sidebar.focused = false;
     }
 
-    // Keys of C-c c, C-x o and the focused tree. Returns true when the key was used.
+    // Keys of C-c c, C-c C-p, the project prompt, C-x o and the focused tree.
+    // Returns true when the key was used.
     pub(crate) fn handle_sidebar_key(&mut self, key: KeyEvent) -> bool {
         let plain = |c| key.code == KeyCode::Char(c) && key.modifiers.is_empty();
-        if std::mem::take(&mut self.sidebar.prefix) {
-            if plain('t') {
-                self.toggle_sidebar();
+        if let Some(prefix) = self.sidebar.prefix.take() {
+            match prefix {
+                Prefix::Tree if plain('t') => self.toggle_sidebar(),
+                Prefix::Project if plain('a') => self.ask_project(),
+                _ => {}
             }
+            return true;
+        }
+        if self.handle_project_input(key) {
             return true;
         }
         if self.prompt_open() {
