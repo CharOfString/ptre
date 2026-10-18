@@ -199,7 +199,7 @@ fn renders_editor_and_updated_shortcuts() {
     assert_eq!(app.editor_area, Rect::new(1, 4, 98, 15));
     let screen = terminal.backend().buffer();
     let tabs: String = (0..100).map(|x| screen[(x, 3)].symbol()).collect();
-    assert!(tabs.starts_with("│❃ [No Name] ●"));
+    assert!(tabs.starts_with("│ ❃ [No Name] ●"));
     let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
     assert!(title.starts_with("╭─ [No Name] · DIRTY BUFFER"));
     assert!(title.contains("· DIRTY BUFFER"));

@@ -19,7 +19,7 @@ use crate::app::App;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
-    layout::Rect,
+    layout::{Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
@@ -47,8 +47,7 @@ fn name(buffer: &Buffer) -> String {
     name.map_or_else(|| "[No Name]".into(), |name| name.to_string_lossy().into())
 }
 
-// One tab, drawn like a name in the menu bar: "❃" marks the active tab.
-// A dot marks unsaved changes.
+// Single tab.
 fn tab(buffer: &Buffer, active: bool) -> Vec<Span<'static>> {
     let (marker, style) = if active {
         (
@@ -58,7 +57,12 @@ fn tab(buffer: &Buffer, active: bool) -> Vec<Span<'static>> {
     } else {
         ("  ", Style::default().fg(MUTED))
     };
-    let mut spans = vec![Span::styled(format!("{marker}{}", name(buffer)), style)];
+
+    let mut spans = vec![
+        Span::styled(marker, style),
+        Span::styled(name(buffer), style),
+    ];
+
     if buffer.is_dirty() {
         spans.push(Span::styled(" ●", Style::default().fg(AMBER)));
     }
@@ -161,19 +165,48 @@ impl App {
     }
 
     pub(crate) fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
+        let area = area.inner(Margin::new(1, 0));
         let active = self.tabs.left.len();
-        let tabs: Vec<_> = self
+        let mut tabs: Vec<_> = self
             .tab_buffers()
             .enumerate()
             .map(|(index, buffer)| tab(buffer, index == active))
             .collect();
-        // Leave out tabs on the left until the active tab fits.
-        let width = |tabs: &[Vec<Span>]| tabs.iter().flatten().map(Span::width).sum::<usize>();
+
+        let fits = |first: usize, last: usize| {
+            let mut width: usize = tabs[first..=last].iter().flatten().map(Span::width).sum();
+            if first > 0 && first == active {
+                width += 2;
+            }
+
+            if last + 1 == tabs.len() {
+                width -= 2;
+            }
+            width <= usize::from(area.width)
+        };
+
         let mut first = 0;
-        while first < active && width(&tabs[first..=active]) > usize::from(area.width) {
+        while first < active && !fits(first, active) {
             first += 1;
         }
-        let spans: Vec<_> = tabs.into_iter().skip(first).flatten().collect();
+
+        let mut last = active;
+        while last + 1 < tabs.len() && fits(first, last + 1) {
+            last += 1;
+        }
+
+        let arrow = |text| Span::styled(text, Style::default().fg(MUTED));
+        if last + 1 < tabs.len() {
+            *tabs[last].last_mut().unwrap() = arrow(" →");
+        }
+
+        if first > 0 && first == active {
+            tabs[first].insert(0, arrow("← "));
+        } else if first > 0 {
+            tabs[first][0] = arrow("← ");
+        }
+
+        let spans: Vec<_> = tabs.drain(first..=last).flatten().collect();
         frame.render_widget(Paragraph::new(Line::from(spans)), area);
     }
 }

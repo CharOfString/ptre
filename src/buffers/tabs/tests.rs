@@ -102,6 +102,17 @@ fn closing_a_tab_with_changes_asks_first() {
     assert!(app.buffer.path.is_none());
 }
 
+// Tab row
+fn row(app: &App, width: u16) -> (String, ratatui::buffer::Buffer) {
+    let mut terminal = Terminal::new(TestBackend::new(width, 1)).unwrap();
+    terminal
+        .draw(|frame| app.draw_tabs(frame, frame.area()))
+        .unwrap();
+    let screen = terminal.backend().buffer().clone();
+    let row = (0..width).map(|x| screen[(x, 0)].symbol()).collect();
+    (row, screen)
+}
+
 #[test]
 fn tab_row_keeps_the_active_tab_in_view() {
     let mut app = App::default();
@@ -109,17 +120,32 @@ fn tab_row_keeps_the_active_tab_in_view() {
         app.open_tab(path.into()).unwrap();
     }
     app.buffer.editor.set_content("changed");
-    let mut terminal = Terminal::new(TestBackend::new(30, 1)).unwrap();
-    terminal
-        .draw(|frame| app.draw_tabs(frame, frame.area()))
-        .unwrap();
-    let screen = terminal.backend().buffer();
-    let row: String = (0..30).map(|x| screen[(x, 0)].symbol()).collect();
-    assert!(row.starts_with("  main.rs  ❃ app.rs ●  "), "{row}");
+    let (row, screen) = row(&app, 30);
+    assert!(row.starts_with(" ← main.rs  ❃ app.rs ●  "), "{row}");
     // The active tab is bold light blue, the others are dimmer, and the dot is amber.
-    assert_eq!(screen[(13, 0)].fg, LIGHT_BLUE);
-    assert!(screen[(13, 0)].modifier.contains(Modifier::BOLD));
-    assert_eq!(screen[(2, 0)].fg, MUTED);
-    assert_eq!(screen[(20, 0)].fg, AMBER);
+    assert_eq!(screen[(14, 0)].fg, LIGHT_BLUE);
+    assert!(screen[(14, 0)].modifier.contains(Modifier::BOLD));
+    assert_eq!(screen[(1, 0)].fg, MUTED);
+    assert_eq!(screen[(3, 0)].fg, MUTED);
+    assert_eq!(screen[(21, 0)].fg, AMBER);
     assert!(screen.content.iter().all(|cell| cell.bg == Color::Reset));
+}
+
+#[test]
+fn arrows_mark_hidden_tabs_and_padding_surrounds_the_row() {
+    let mut app = App::default();
+    for path in ["Cargo.toml", "README.md", "src/main.rs", "src/app.rs"] {
+        app.open_tab(path.into()).unwrap();
+    }
+    // All tabs fit: only the padding is added.
+    assert_eq!(
+        row(&app, 50).0,
+        "   Cargo.toml    README.md    main.rs  ❃ app.rs   "
+    );
+    chord(&mut app, KeyCode::Left);
+    chord(&mut app, KeyCode::Left);
+    assert_eq!(row(&app, 30).0, "   Cargo.toml  ❃ README.md →  ");
+    // "← " needs its own room before the active tab.
+    chord(&mut app, KeyCode::Right);
+    assert_eq!(row(&app, 20).0, " ← ❃ main.rs →      ");
 }
