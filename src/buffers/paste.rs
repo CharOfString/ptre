@@ -54,6 +54,10 @@ impl App {
             }
             return;
         }
+        // For the file tree, it doesn't accept pasting.
+        if self.sidebar.focused {
+            return;
+        }
 
         // Insert the text as it is, in one edit. Typing it key by key would
         // indent each new line again and redraw the screen after each key.
@@ -87,7 +91,7 @@ impl App {
     }
 
     // True when typed keys do not go straight into the text.
-    fn keys_go_elsewhere(&self) -> bool {
+    pub(crate) fn keys_go_elsewhere(&self) -> bool {
         self.prompt_open()
             || self.search.is_active()
             || self.goto_line.is_busy()
@@ -95,6 +99,7 @@ impl App {
             || self.ctrl_x_wait_flag
             || self.ctrl_c_wait_flag
             || self.ctrl_c_t_wait_flag
+            || self.sidebar.prefix.is_some()
     }
 }
 

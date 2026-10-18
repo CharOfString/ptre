@@ -30,6 +30,14 @@ impl App {
         .areas(frame.area());
         self.menu.draw_bar(frame, menu_area, self.is_c_or_cpp());
 
+        // Drawing the file tree layout on top left...
+        let editor_area = if self.sidebar.visible {
+            let [sidebar, rest] = super::sidebar::split(editor_area);
+            self.sidebar.draw(frame, sidebar, self.nerd_font);
+            rest
+        } else {
+            editor_area
+        };
         let editor_area = if self.terminal.visible {
             let [editor, terminal] = super::terminal::split(editor_area);
             if let Err(err) = self.terminal.draw(frame, terminal) {
@@ -61,9 +69,15 @@ impl App {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(Color::White))
             .title(title);
-        let [content_area, buffer_status_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(2)])
-                .areas(border.inner(editor_area));
+
+        // Tab bar
+        let [tab_area, content_area, buffer_status_area] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(2),
+        ])
+        .areas(border.inner(editor_area));
+        self.draw_tabs(frame, tab_area);
         self.editor_area = content_area;
         // While the paste scroll runs, draw the editor parts from its current line.
         let offset_y = self.buffer.editor.get_offset_y();
@@ -86,12 +100,8 @@ impl App {
         self.draw_fix_chooser(frame);
         self.draw_diagnostic_popup(frame);
         if !self.terminal.focused
-            && !self.cpp_check_modal()
-            && self.save_path_input.is_none()
-            && !self.search.reads_input()
-            && !self.goto_line.is_open()
-            && !self.overwrite_confirm
-            && self.menu.active.is_none()
+            && !self.sidebar.focused
+            && !self.prompt_open()
             && let Some((x, y)) = self.buffer.editor.get_visible_cursor(&self.editor_area)
         {
             frame.set_cursor_position((x, y));
@@ -106,6 +116,11 @@ impl App {
             )
         } else if let Some(prompt) = self.search.prompt() {
             format!(" {prompt}")
+        } else if let Some(input) = &self.sidebar.project_input {
+            format!(
+                " Open project: {input}█  ※  Enter: open  Esc: cancel  ※  {}",
+                self.status_bar_text
+            )
         } else if let Some(path_input) = &self.save_path_input {
             format!(
                 " Save as: {path_input}█  ※  Enter: save  Esc: cancel  ※  {}",
@@ -120,6 +135,8 @@ impl App {
             // A focused terminal takes all keys, so show its keys instead.
             let hints = if self.terminal.focused {
                 "C-x o: focus ※  M-v/C-v: scroll"
+            } else if self.sidebar.focused {
+                "C-x o: focus ※  RET: open ※  TAB: fold ※  q: hide"
             } else {
                 "F10: menu ※  C-c t t: terminal"
             };
@@ -165,8 +182,11 @@ impl App {
         self.draw_goto_line(frame);
         self.draw_cpp_check(frame);
 
+        let path = self.buffer.path.as_deref();
         if self.overwrite_confirm {
-            super::dialog::draw_overwrite(frame, self.buffer.path.as_deref());
+            super::dialog::draw_confirm(frame, path, &super::dialog::OVERWRITE);
+        } else if self.tabs.close_confirm {
+            super::dialog::draw_confirm(frame, path, &super::dialog::CLOSE);
         }
     }
 }

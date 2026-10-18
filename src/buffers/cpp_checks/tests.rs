@@ -40,6 +40,15 @@ fn press(app: &mut App, code: KeyCode) {
     app.handle_key(KeyEvent::new(code, KeyModifiers::NONE));
 }
 
+// Wait for the running check, at most 5 seconds.
+fn wait(app: &mut App) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while app.cpp_checks.pending.is_some() && std::time::Instant::now() < deadline {
+        app.poll_cpp_check();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 fn cpp_app(dir: &Directory) -> App {
     let mut app = App::default();
     let path = dir.0.join("test.cpp");
@@ -154,11 +163,7 @@ fn checker_runs_literal_paths_and_displays_stderr_and_exit_status() {
     app.cpp_checks.settings.cpplint_path = executable.display().to_string();
     app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
     press(&mut app, KeyCode::Char('l'));
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while app.cpp_checks.pending.is_some() && std::time::Instant::now() < deadline {
-        app.poll_cpp_check();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    wait(&mut app);
     let report = app.cpp_checks.report.as_ref().unwrap();
     assert!(report.contains("warning: test"));
     assert!(report.contains("checked:"));
@@ -232,11 +237,7 @@ fn cpplint_findings_show_in_the_editor_until_the_text_changes() {
     app.cpp_checks.settings.cpplint = true;
     app.cpp_checks.settings.cpplint_path = executable.display().to_string();
     app.run_cpp_check(Tool::Cpplint);
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while app.cpp_checks.pending.is_some() && std::time::Instant::now() < deadline {
-        app.poll_cpp_check();
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    wait(&mut app);
     let findings = app.cpplint_diagnostics();
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].range, 0..13, "the code of `int main() {{}}`");
@@ -257,4 +258,69 @@ fn cpplint_findings_show_in_the_editor_until_the_text_changes() {
     // Editing may move the lines, so the findings hide until Cpplint runs again.
     press(&mut app, KeyCode::Char('x'));
     assert!(app.cpplint_diagnostics().is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn checks_in_an_open_project_run_from_its_folder() {
+    use std::{ffi::OsStr, os::unix::fs::PermissionsExt};
+    let dir = Directory::new();
+    let root = dir.0.canonicalize().unwrap();
+    std::fs::create_dir_all(root.join("build")).unwrap();
+    for file in [
+        "CPPLINT.cfg",
+        ".clang-format",
+        "build/compile_commands.json",
+    ] {
+        std::fs::write(root.join(file), "").unwrap();
+    }
+    let mut app = cpp_app(&dir);
+
+    // C-c C-p a tells which config files the project has.
+    app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    app.handle_key(KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL));
+    press(&mut app, KeyCode::Char('a'));
+    app.handle_paste(root.display().to_string());
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        app.status_bar_text,
+        "C/C++ config files: CPPLINT.cfg, .clang-format, build/compile_commands.json"
+    );
+
+    // Cpplint runs from the project and names header guards after it.
+    let executable = root.join("cpplint");
+    let script = "#!/bin/sh\nprintf 'cwd: %s\\n' \"$(pwd -P)\"\nprintf 'arg: %s\\n' \"$@\"\n";
+    std::fs::write(&executable, script).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    app.cpp_checks.settings.cpplint = true;
+    app.cpp_checks.settings.cpplint_path = executable.display().to_string();
+    app.run_cpp_check(Tool::Cpplint);
+    wait(&mut app);
+    let file = root.join("test.cpp");
+    let report = app.cpp_checks.report.as_ref().unwrap();
+    assert!(
+        report.contains(&format!("cwd: {}\n", root.display())),
+        "{report}"
+    );
+    let args = format!(
+        "arg: --repository={}\narg: {}\n",
+        root.display(),
+        file.display()
+    );
+    assert!(report.contains(&args), "{report}");
+
+    // clang-tidy gets the compile database in build/.
+    let tidy = project::command(Tool::Tidy, "clang-tidy", &file, Some(&root));
+    assert_eq!(tidy.get_current_dir(), Some(root.as_path()));
+    let build = root.join("build");
+    let args: Vec<_> = tidy.get_args().collect();
+    assert_eq!(
+        args,
+        [OsStr::new("-p"), build.as_os_str(), file.as_os_str()]
+    );
+
+    // A file outside the project is checked as before.
+    let outside = project::command(Tool::Cpplint, "cpplint", &file, Some(&build));
+    assert_eq!(outside.get_current_dir(), None);
+    assert_eq!(outside.get_args().collect::<Vec<_>>(), [file.as_os_str()]);
 }

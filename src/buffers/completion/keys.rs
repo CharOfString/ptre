@@ -14,6 +14,7 @@
 
 use super::words::is_word_char;
 use crate::app::App;
+use crate::buffers::sidebar::Prefix;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 // Word length at which typing opens the popup by itself.
@@ -37,12 +38,16 @@ impl App {
             self.ctrl_c_wait_flag = false;
             if key.code == KeyCode::Char('l') && alt {
                 self.toggle_auto_completion();
+            } else if key.code == KeyCode::Char('p') && control {
+                self.sidebar.prefix = Some(Prefix::Project);
             } else if key.modifiers.is_empty() {
                 use crate::buffers::cpp_checks::Tool;
                 match key.code {
                     KeyCode::Char('l') => self.run_cpp_check(Tool::Cpplint),
                     // C-c t is a prefix; handle_terminal_key reads the next key.
                     KeyCode::Char('t') => self.ctrl_c_t_wait_flag = true,
+                    // C-c c is a prefix; handle_sidebar_key reads the next key, as for C-c C-p.
+                    KeyCode::Char('c') => self.sidebar.prefix = Some(Prefix::Tree),
                     KeyCode::Char('a') => self.request_fix(),
                     _ => {}
                 }

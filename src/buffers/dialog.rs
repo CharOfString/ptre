@@ -21,7 +21,35 @@ use ratatui::{
 };
 use std::path::Path;
 
-pub(super) fn draw_overwrite(frame: &mut Frame, path: Option<&Path>) {
+// The words of a yes or no dialog.
+pub(super) struct Confirm {
+    title: &'static str,
+    question: &'static str,
+    warning: &'static str,
+    action: &'static str,
+    cancel: &'static str,
+    short: &'static str,
+}
+
+pub(super) const OVERWRITE: Confirm = Confirm {
+    title: "Confirm overwrite",
+    question: "File has been changed on disk. Overwrite it?",
+    warning: "Saving will replace the external changes.",
+    action: " Overwriting",
+    cancel: "Cancel keeps both your file and buffer unchanged.",
+    short: "File changed on disk.",
+};
+
+pub(super) const CLOSE: Confirm = Confirm {
+    title: "Confirm close",
+    question: "Buffer has unsaved changes. Close it?",
+    warning: "Closing will lose the unsaved changes.",
+    action: " Close without saving",
+    cancel: "Cancel keeps the tab open.",
+    short: "Unsaved changes.",
+};
+
+pub(super) fn draw_confirm(frame: &mut Frame, path: Option<&Path>, words: &Confirm) {
     let area = frame.area();
     let bg = Color::Rgb(28, 28, 32);
     let fg = Color::Rgb(225, 222, 216);
@@ -64,33 +92,27 @@ pub(super) fn draw_overwrite(frame: &mut Frame, path: Option<&Path>) {
         ),
         Span::styled(" Keep editing   ", Style::default().fg(fg)),
         Span::styled(" Y/ENTER ", Style::default().fg(bg).bg(red).bold()),
-        Span::styled(" Overwriting", Style::default().fg(red).bg(bg).bold()),
+        Span::styled(words.action, Style::default().fg(red).bg(bg).bold()),
     ]);
     let lines = if inner.height >= 9 && inner.width >= 48 {
         vec![
             Line::from(""),
-            Line::styled("!  Confirm overwrite", Style::default().fg(amber).bold()),
+            Line::styled(
+                format!("!  {}", words.title),
+                Style::default().fg(amber).bold(),
+            ),
             Line::from(""),
             Line::styled(filename, Style::default().fg(fg).bold()),
-            Line::styled(
-                "File has been changed on disk. Overwrite it?",
-                Style::default().fg(fg),
-            ),
-            Line::styled(
-                "Saving will replace the external changes.",
-                Style::default().fg(muted),
-            ),
+            Line::styled(words.question, Style::default().fg(fg)),
+            Line::styled(words.warning, Style::default().fg(muted)),
             Line::from(""),
             buttons,
-            Line::styled(
-                "Cancel keeps both your file and buffer unchanged.",
-                Style::default().fg(muted),
-            ),
+            Line::styled(words.cancel, Style::default().fg(muted)),
         ]
     } else {
         vec![
-            Line::styled("Confirm overwrite", Style::default().fg(amber).bold()),
-            Line::from("File changed on disk."),
+            Line::styled(words.title, Style::default().fg(amber).bold()),
+            Line::from(words.short),
             Line::styled("Y/ENTER: confirm", Style::default().fg(red)),
             Line::from("N / Esc: cancel"),
         ]
@@ -106,7 +128,9 @@ mod tests {
     #[test]
     fn overwrite_border_has_rounded_corners() {
         let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
-        terminal.draw(|frame| draw_overwrite(frame, None)).unwrap();
+        terminal
+            .draw(|frame| draw_confirm(frame, None, &OVERWRITE))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         let x = 8;
         let y = 5;

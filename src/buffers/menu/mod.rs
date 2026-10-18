@@ -24,7 +24,11 @@ use ratatui::{
 };
 
 pub(crate) const LIGHT_BLUE: Color = Color::Rgb(155, 205, 245);
-const FILE: &[(&str, &str)] = &[("Save", "C-x C-s"), ("Quit", "C-x C-c")];
+const FILE: &[(&str, &str)] = &[
+    ("Open Project", "C-c C-p a"),
+    ("Save", "C-x C-s"),
+    ("Quit", "C-x C-c"),
+];
 const EDIT: &[(&str, &str)] = &[
     ("Undo", "C-x u"),
     ("Redo", "C-M-_"),
@@ -110,14 +114,17 @@ fn items(
             ("Complete", "M-/"),
             ("Quick Fix", "C-c a"),
         ],
-        (WINDOW_MENU, _) => vec![(
-            if nerd_font {
-                "NF Mode: On"
-            } else {
-                "NF Mode: Off"
-            },
-            "",
-        )],
+        (WINDOW_MENU, _) => vec![
+            (
+                if nerd_font {
+                    "NF Mode: On"
+                } else {
+                    "NF Mode: Off"
+                },
+                "",
+            ),
+            ("File Tree", "C-c c t"),
+        ],
         (CPP_MENU, Some(settings)) => cpp_entries(settings)
             .into_iter()
             .map(|(label, shortcut, _)| (label, shortcut))
@@ -306,11 +313,15 @@ impl App {
                 let ctrl = KeyModifiers::CONTROL;
                 let alt = KeyModifiers::ALT;
                 if active == 0 {
-                    self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
-                    self.handle_key(KeyEvent::new(
-                        KeyCode::Char(if selected == 0 { 's' } else { 'c' }),
-                        ctrl,
-                    ));
+                    if selected == 0 {
+                        self.ask_project();
+                    } else {
+                        self.handle_key(KeyEvent::new(KeyCode::Char('x'), ctrl));
+                        self.handle_key(KeyEvent::new(
+                            KeyCode::Char(if selected == 1 { 's' } else { 'c' }),
+                            ctrl,
+                        ));
+                    }
                 } else if active == BUFFER_MENU {
                     if selected == 3 {
                         self.handle_key(KeyEvent::new(KeyCode::Char('g'), alt));
@@ -330,7 +341,11 @@ impl App {
                         self.handle_key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
                     }
                 } else if active == WINDOW_MENU {
-                    self.toggle_nerd_font();
+                    if selected == 0 {
+                        self.toggle_nerd_font();
+                    } else {
+                        self.toggle_sidebar();
+                    }
                 } else if active == CPP_MENU {
                     // selected indexes the same entries the popup showed.
                     match cpp_entries(&self.cpp_checks.settings)[selected].2 {
