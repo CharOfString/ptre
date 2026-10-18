@@ -77,6 +77,10 @@ impl App {
         tabs.left.iter().chain([&self.buffer]).chain(&tabs.right)
     }
 
+    pub(crate) fn has_other_tabs(&self) -> bool {
+        !self.tabs.left.is_empty() || !self.tabs.right.is_empty()
+    }
+
     // Make the tab at `index` active. An index past the last tab goes round to the first.
     fn select_tab(&mut self, index: usize) {
         let mut all = std::mem::take(&mut self.tabs.left);

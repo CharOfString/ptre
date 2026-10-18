@@ -70,14 +70,18 @@ impl App {
             .border_style(Style::default().fg(Color::White))
             .title(title);
 
-        // Tab bar
+        let tab_bar = self.has_other_tabs();
         let [tab_area, content_area, buffer_status_area] = Layout::vertical([
-            Constraint::Length(1),
+            Constraint::Length(u16::from(tab_bar)),
             Constraint::Min(0),
             Constraint::Length(2),
         ])
+
         .areas(border.inner(editor_area));
-        self.draw_tabs(frame, tab_area);
+        if tab_bar {
+            self.draw_tabs(frame, tab_area);
+        }
+
         self.editor_area = content_area;
         // While the paste scroll runs, draw the editor parts from its current line.
         let offset_y = self.buffer.editor.get_offset_y();

@@ -196,10 +196,11 @@ fn renders_editor_and_updated_shortcuts() {
     app.buffer.obsolete = true;
     let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
     terminal.draw(|frame| app.draw(frame)).unwrap();
-    assert_eq!(app.editor_area, Rect::new(1, 4, 98, 15));
+    // With one tab, the tab bar is hidden and the editor starts right below the border.
+    assert_eq!(app.editor_area, Rect::new(1, 3, 98, 16));
     let screen = terminal.backend().buffer();
-    let tabs: String = (0..100).map(|x| screen[(x, 3)].symbol()).collect();
-    assert!(tabs.starts_with("│ ❃ [No Name] ●"));
+    let row: String = (0..100).map(|x| screen[(x, 3)].symbol()).collect();
+    assert!(!row.contains('❃'), "{row}");
     let title: String = (0..100).map(|x| screen[(x, 2)].symbol()).collect();
     assert!(title.starts_with("╭─ [No Name] · DIRTY BUFFER"));
     assert!(title.contains("· DIRTY BUFFER"));
@@ -228,6 +229,14 @@ fn renders_editor_and_updated_shortcuts() {
             .get_visible_cursor(&app.editor_area)
             .is_some()
     );
+
+    // A second tab brings the tab bar back.
+    app.open_tab("Cargo.toml".into()).unwrap();
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    assert_eq!(app.editor_area, Rect::new(1, 4, 98, 15));
+    let screen = terminal.backend().buffer();
+    let tabs: String = (0..100).map(|x| screen[(x, 3)].symbol()).collect();
+    assert!(tabs.starts_with("│   [No Name] ●  ❃ Cargo.toml"), "{tabs}");
 }
 
 #[test]
