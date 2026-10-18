@@ -268,6 +268,17 @@ impl App {
         self.status_bar_text = "Enter a folder path".into();
     }
 
+    // Open directory as project.
+    pub(crate) fn open_project(&mut self, dir: PathBuf) {
+        // Tell which config files the project has.
+        let found = crate::buffers::cpp_checks::config_files(&dir);
+        if !found.is_empty() {
+            self.status_bar_text = format!("C/C++ config files: {}", found.join(", "));
+        }
+        self.sidebar.project = Some(dir.clone());
+        self.show_sidebar(dir);
+    }
+
     // Keys of the open project prompt. Returns true while the prompt is open.
     fn handle_project_input(&mut self, key: KeyEvent) -> bool {
         let Some(input) = &mut self.sidebar.project_input else {
@@ -285,15 +296,8 @@ impl App {
                     .filter(|dir| dir.is_dir());
                 if let Some(dir) = dir {
                     self.sidebar.project_input = None;
-                    // Tell which config files the project has.
-                    let found = crate::buffers::cpp_checks::config_files(&dir);
-                    self.status_bar_text = if found.is_empty() {
-                        String::new()
-                    } else {
-                        format!("C/C++ config files: {}", found.join(", "))
-                    };
-                    self.sidebar.project = Some(dir.clone());
-                    self.show_sidebar(dir);
+                    self.status_bar_text.clear();
+                    self.open_project(dir);
                 } else {
                     self.status_bar_text = "No such folder".into();
                 }

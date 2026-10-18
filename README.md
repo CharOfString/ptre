@@ -81,7 +81,11 @@ To open an existing file in the editor buffer, pass its relative or absolute pat
 ```shell
 $ cargo run -- README.md
 ```
-Directories and multiple arguments are rejected.
+A folder opens as a project, as `Ctrl + C` `Ctrl + P` `A` does:
+```shell
+$ cargo run -- src
+```
+Multiple arguments are rejected.
 
 ### Packaging
 #### Debian

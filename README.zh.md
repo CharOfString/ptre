@@ -80,7 +80,11 @@ $ cargo run
 ```bash
 $ cargo run -- README.md
 ```
-同时传入多个文件、传入目录会被`ptre`拒绝
+传入目录时会将其作为项目打开，效果与 `Ctrl + C` `Ctrl + P` `A` 相同：
+```bash
+$ cargo run -- src
+```
+同时传入多个路径会被`ptre`拒绝
 
 ### 打包
 #### Debian

@@ -29,16 +29,20 @@ fn main() -> io::Result<()> {
     let mut app = App::default();
     app.load_cpp_preferences();
 
+    // Open the passed in file, or the passed in folder as a project, if any.
+    if let Some(path) = path_argument(std::env::args_os().skip(1))? {
+        if path.is_dir() {
+            app.open_project(path.canonicalize()?);
+        } else {
+            app.buffer.open(path)?;
+        }
+    }
+
     // Language server plugins; a broken plugin file is reported but does not stop ptre.
     let (plugins, errors) = lsp::load_plugins();
     app.completion.set_plugins(plugins);
     if let Some(error) = errors.first() {
         app.status_bar_text = format!("Plugin error: {error}");
-    }
-
-    // Attempt to open the passed in file, if any.
-    if let Some(path) = file_argument(std::env::args_os().skip(1))? {
-        app.buffer.open(path)?;
     }
 
     ratatui::run(|terminal| {
@@ -50,28 +54,28 @@ fn main() -> io::Result<()> {
     })
 }
 
-// Validate the file arguments
-fn file_argument(mut args: impl Iterator<Item = OsString>) -> io::Result<Option<PathBuf>> {
+// Validate the path arguments
+fn path_argument(mut args: impl Iterator<Item = OsString>) -> io::Result<Option<PathBuf>> {
     // Read first argument
     let Some(argument) = args.next() else {
         return Ok(None);
     };
 
-    // We only allow to open one file for each instance.
+    // We only allow to open one file or folder for each instance.
     if args.next().is_some() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Only one file is allowed.",
+            "Only one path is allowed.",
         ));
     }
 
-    // Check if that is an actual file.
-    // TODO: To allow directories ONCE AFTER we implemented workspace feature.
+    // Check if that is an actual file or folder.
     let path = PathBuf::from(argument);
-    if !std::fs::metadata(&path)?.is_file() {
+    let metadata = std::fs::metadata(&path)?;
+    if !metadata.is_file() && !metadata.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Only regular file (NOT a directory) is allowed.",
+            "Only a regular file or a folder is allowed.",
         ));
     }
     Ok(Some(path))
@@ -85,7 +89,7 @@ mod tests {
     fn accepts_relative_and_absolute_file_paths_and_opens_them() {
         let absolute = std::env::current_dir().unwrap().join("README.md");
         for name in ["Cargo.toml".into(), "src/main.rs".into(), absolute] {
-            let path = file_argument([name.into_os_string()].into_iter())
+            let path = path_argument([name.into_os_string()].into_iter())
                 .unwrap()
                 .unwrap();
             let mut app = App::default();
@@ -99,17 +103,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_directories_missing_files_and_extra_arguments() {
-        for name in ["src", ".", "missing-file"] {
+    fn folders_open_as_projects() {
+        let src = std::env::current_dir().unwrap().join("src");
+        for name in ["src", "src/", "./src"] {
+            let path = path_argument([OsString::from(name)].into_iter())
+                .unwrap()
+                .unwrap();
+            let mut app = App::default();
+            app.open_project(path.canonicalize().unwrap());
+            assert_eq!(app.sidebar.project.as_ref(), Some(&src), "{name}");
+            assert!(app.sidebar.visible && app.sidebar.focused, "{name}");
+            assert_eq!(app.buffer.path, None, "{name}");
+        }
+    }
+
+    #[test]
+    fn rejects_missing_paths_devices_and_extra_arguments() {
+        for name in ["missing-file", "/dev/null"] {
             assert!(
-                file_argument([OsString::from(name)].into_iter()).is_err(),
+                path_argument([OsString::from(name)].into_iter()).is_err(),
                 "{name}"
             );
         }
         assert!(
-            file_argument([OsString::from("Cargo.toml"), OsString::from("README.md")].into_iter())
+            path_argument([OsString::from("Cargo.toml"), OsString::from("README.md")].into_iter())
                 .is_err()
         );
-        assert!(file_argument(std::iter::empty()).unwrap().is_none());
+        assert!(path_argument(std::iter::empty()).unwrap().is_none());
     }
 }
