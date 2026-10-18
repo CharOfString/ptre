@@ -201,6 +201,7 @@ fn ctrl_c_ctrl_p_a_opens_a_project_that_stays() {
     assert_eq!(app.buffer.editor.get_content(), "a.txt");
     assert!(app.sidebar.project_input.is_none() && app.sidebar.focused);
     assert_eq!(app.sidebar.root, src);
+    assert_eq!(app.sidebar.project.as_ref(), Some(&src));
     assert_eq!(rows(&app), ["inner", "main.rs"]);
 
     // The tree keeps the project while the open file is inside it.

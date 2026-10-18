@@ -38,6 +38,8 @@ pub(crate) struct Sidebar {
     pub(crate) prefix: Option<Prefix>,
     // The folder typed after C-c C-p a, while the prompt is open.
     pub(crate) project_input: Option<String>,
+    // The folder opened with C-c C-p a. C/C++ checks of files inside it run from there.
+    pub(crate) project: Option<PathBuf>,
     root: PathBuf,
     // Folders that show their content.
     expanded: HashSet<PathBuf>,
@@ -283,7 +285,14 @@ impl App {
                     .filter(|dir| dir.is_dir());
                 if let Some(dir) = dir {
                     self.sidebar.project_input = None;
-                    self.status_bar_text.clear();
+                    // Tell which config files the project has.
+                    let found = crate::buffers::cpp_checks::config_files(&dir);
+                    self.status_bar_text = if found.is_empty() {
+                        String::new()
+                    } else {
+                        format!("C/C++ config files: {}", found.join(", "))
+                    };
+                    self.sidebar.project = Some(dir.clone());
                     self.show_sidebar(dir);
                 } else {
                     self.status_bar_text = "No such folder".into();

@@ -13,14 +13,16 @@
 // not, see <https://www.gnu.org/licenses/>.
 
 mod cpplint;
+mod project;
 pub(super) mod settings;
 #[cfg(test)]
 mod tests;
 mod ui;
 
 use crate::{app::App, lsp::Diagnostic};
+pub(crate) use project::config_files;
 use settings::{Settings, settings_path};
-use std::{io, path::PathBuf, process::Command, sync::mpsc};
+use std::{io, path::PathBuf, sync::mpsc};
 
 #[derive(Clone, Copy)]
 pub(crate) enum Tool {
@@ -159,16 +161,17 @@ impl App {
         };
 
         let program = match tool {
-            Tool::Tidy => "clang-tidy".to_owned(),
-            Tool::Cpplint => settings.cpplint_path.clone(),
+            Tool::Tidy => "clang-tidy",
+            Tool::Cpplint => &settings.cpplint_path,
         };
+
+        let mut command = project::command(tool, program, &path, self.sidebar.project.as_deref());
         let (sender, receiver) = mpsc::channel();
         let text = self.buffer.editor.get_content();
         self.cpp_checks.checking = Some((tool, path.clone(), text));
 
-        // Run without a shell so spaces and shell characters in paths stay literal.
         std::thread::spawn(move || {
-            let result = Command::new(program).arg(&path).output();
+            let result = command.output();
             let report = match result {
                 Ok(output) => format!(
                     "{name}: {}\n{}\n\n{}{}",
