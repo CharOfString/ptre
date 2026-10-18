@@ -1,3 +1,12 @@
+ptre (0.1.7-1) unstable; urgency=medium
+
+  * Supported opening directories as projects.
+  * Added a filesystem side bar.
+  * Added multiple editor tab system.
+  * Added auto configure of clang-tidy and cpplint based on configuration file when opening project.
+
+ -- CharOfString <root@charofstring.cc>  Sun, 19 Oct 2026 01:21:11 -0500
+
 ptre (0.1.6-1) unstable; urgency=medium
 
   * Fixed indent issue while pasting.

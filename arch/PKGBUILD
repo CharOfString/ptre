@@ -1,7 +1,7 @@
 # Maintainer: CharOfString <root@charofstring.cc>
 
 pkgname=ptre
-pkgver=0.1.6
+pkgver=0.1.7
 pkgrel=1
 pkgdesc='Lightweight text editor'
 arch=('x86_64' 'aarch64')
